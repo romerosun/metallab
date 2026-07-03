@@ -21,10 +21,10 @@ LINE_COLOR = {"Line 1": "#3b82f6", "Line 2": "#22c55e", "Line 3": "#a855f7", "Sh
 
 st.markdown("""
 <style>
-.block-container {padding-top: 1.4rem; padding-bottom: 2rem; max-width: 1760px;}
+.block-container {padding-top: 1.4rem; padding-bottom: 2rem; max-width: 1900px;}
 #MainMenu, footer, header {visibility: hidden;}
-h1 {font-size: 2.2rem; margin-bottom: .2rem;}
-.kpi-row {display:grid; grid-template-columns: repeat(5, minmax(180px, 1fr)); gap:18px; margin: 24px 0 30px 0;}
+h1 {font-size: 2.15rem; margin-bottom: .1rem;}
+.kpi-row {display:grid; grid-template-columns: repeat(5, minmax(190px, 1fr)); gap:18px; margin: 24px 0 30px 0;}
 .kpi {background:#10141c; border:1px solid #2a3140; border-radius:18px; padding:22px 24px; min-height:126px;}
 .kpi-label {color:#a8b3c7; font-size:.9rem; margin-bottom:10px;}
 .kpi-value {font-size:2rem; font-weight:800; color:#f8fafc; line-height:1;}
@@ -47,7 +47,7 @@ st.markdown(f"""
   <div class="kpi"><div class="kpi-label">Overall utilization</div><div class="kpi-value">{overall_util}%</div><div class="kpi-note">Average active load</div></div>
   <div class="kpi"><div class="kpi-label">Active jobs</div><div class="kpi-value">{active_jobs}</div><div class="kpi-note">Open production jobs</div></div>
   <div class="kpi"><div class="kpi-label">WIP hours</div><div class="kpi-value">{wip_hours}h</div><div class="kpi-note">Estimated work in progress</div></div>
-  <div class="kpi"><div class="kpi-label">Completed today</div><div class="kpi-value">{completed_today}</div><div class="kpi-note">Finished and sent to QA</div></div>
+  <div class="kpi"><div class="kpi-label">Completed today</div><div class="kpi-value">{completed_today}</div><div class="kpi-note">Finished today</div></div>
   <div class="kpi"><div class="kpi-label">Bottleneck</div><div class="kpi-value" style="font-size:1.55rem">{html.escape(bottleneck.machine)}</div><div class="kpi-note">{int(bottleneck.utilization)}% utilization</div></div>
 </div>
 """, unsafe_allow_html=True)
@@ -62,8 +62,11 @@ def machine_card(r):
     current_job = html.escape(str(r.current_job))
     status = html.escape(str(r.status))
     return f"""
-    <div class="machine" style="border-color:{line_color}">
-      <div class="m-top"><div class="m-name">{int(r.id)}. {name}</div><span class="dot" style="background:{status_color}"></span></div>
+    <div class="machine" style="--line:{line_color};--status:{status_color};">
+      <div class="m-top">
+        <div class="m-name">{int(r.id)}. {name}</div>
+        <span class="dot"></span>
+      </div>
       <div class="rings">
         <div class="ring" style="--p:{util};--c:{status_color};"><div><b>{util}%</b><small>Util</small></div></div>
         <div class="ring" style="--p:{wip_pct};--c:#8aa0bd;"><div><b>{r.wip_hours}h</b><small>WIP</small></div></div>
@@ -87,71 +90,75 @@ layout_html = f"""
 <html>
 <head>
 <style>
+* {{ box-sizing:border-box; }}
 body {{ margin:0; background:#0b0f16; color:#f8fafc; font-family:Inter, Segoe UI, Arial, sans-serif; }}
-.wrap {{ width:100%; box-sizing:border-box; padding:0; }}
-.floor {{
-  position:relative; width:100%; min-height:920px; box-sizing:border-box;
-  border:2px solid #334155; border-radius:20px; background:#0d121a; overflow:hidden;
-}}
-.floor-title {{ position:absolute; top:18px; left:0; right:0; text-align:center; font-weight:800; color:#dbeafe; font-size:18px; }}
-.support {{ position:absolute; left:26px; top:90px; width:170px; display:grid; gap:22px; }}
-.output {{ position:absolute; right:26px; top:110px; width:190px; display:grid; gap:22px; }}
-.zone-box {{ border-radius:14px; padding:28px 18px; border:1px solid #334155; background:#132338; color:#60a5fa; font-weight:700; text-align:center; font-size:17px; line-height:1.35; }}
+.floor {{ width:100%; min-height:1160px; border:2px solid #334155; border-radius:22px; background:#0d121a; padding:34px 34px 28px; overflow:visible; }}
+.floor-title {{ text-align:center; font-weight:800; color:#dbeafe; font-size:18px; margin-bottom:36px; }}
+.main-grid {{ display:grid; grid-template-columns: 180px 1.35fr 1.35fr 1.15fr 180px; gap:34px; align-items:start; }}
+.support, .output {{ display:grid; gap:26px; padding-top:8px; }}
+.zone-box {{ border-radius:14px; padding:30px 18px; border:1px solid #334155; background:#132338; color:#60a5fa; font-weight:800; text-align:center; font-size:16px; line-height:1.35; min-height:100px; display:grid; place-items:center; }}
 .output .zone-box:first-child {{ background:#12331f; color:#4ade80; }}
 .output .zone-box:nth-child(2) {{ background:#36340d; color:#fde68a; }}
-.line {{ position:absolute; border:1.5px solid #334155; border-radius:18px; padding:56px 22px 22px 22px; box-sizing:border-box; }}
-.line h3 {{ position:absolute; top:18px; left:22px; margin:0; font-size:17px; letter-spacing:.02em; }}
-.line1 {{ left:225px; top:88px; width:500px; min-height:535px; }}
-.line2 {{ left:755px; top:88px; width:500px; min-height:535px; }}
-.line3 {{ left:1285px; top:88px; width:390px; min-height:680px; }}
+.line {{ border:1.5px solid #334155; border-radius:18px; padding:26px 26px 28px; min-height:640px; background:rgba(2,6,23,.14); }}
+.line h3 {{ margin:0 0 22px; font-size:17px; letter-spacing:.02em; white-space:nowrap; }}
 .l1 h3 {{ color:#60a5fa; }} .l2 h3 {{ color:#4ade80; }} .l3 h3 {{ color:#c084fc; }}
-.grid {{ display:grid; grid-template-columns:1fr 1fr; gap:22px; }}
-.line3 .grid {{ grid-template-columns:1fr; }}
-.machine {{ background:#10141c; border:2px solid; border-radius:14px; min-height:205px; padding:18px; box-sizing:border-box; }}
-.m-top {{ display:flex; justify-content:space-between; gap:10px; align-items:flex-start; margin-bottom:14px; }}
-.m-name {{ font-weight:800; line-height:1.18; font-size:15.5px; max-width:190px; }}
-.dot {{ width:12px; height:12px; border-radius:50%; display:block; flex:0 0 auto; box-shadow:0 0 0 4px rgba(255,255,255,.04); }}
-.rings {{ display:flex; gap:24px; align-items:center; margin:8px 0 16px 0; }}
-.ring {{ width:86px; height:86px; border-radius:50%; background:conic-gradient(var(--c) calc(var(--p)*1%), #e8edf5 0); position:relative; display:grid; place-items:center; }}
-.ring:after {{ content:""; position:absolute; inset:15px; background:#0b0f16; border-radius:50%; }}
+.line-grid {{ display:grid; grid-template-columns:repeat(2, minmax(220px, 1fr)); gap:28px; }}
+.l3 .line-grid {{ grid-template-columns:1fr; }}
+.machine {{ background:#10141c; border:1.5px solid #2e3746; border-left:4px solid var(--line); border-radius:15px; min-height:245px; padding:20px; }}
+.m-top {{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:18px; }}
+.m-name {{ font-weight:850; line-height:1.18; font-size:16px; max-width:210px; }}
+.dot {{ width:12px; height:12px; border-radius:50%; display:block; flex:0 0 auto; background:var(--status); box-shadow:0 0 0 5px rgba(255,255,255,.04); }}
+.rings {{ display:flex; gap:28px; align-items:center; margin:10px 0 20px; }}
+.ring {{ width:88px; height:88px; border-radius:50%; background:conic-gradient(var(--c) calc(var(--p)*1%), #e8edf5 0); position:relative; display:grid; place-items:center; }}
+.ring:after {{ content:""; position:absolute; inset:16px; background:#0b0f16; border-radius:50%; }}
 .ring div {{ position:relative; z-index:1; text-align:center; }}
 .ring b {{ display:block; font-size:15px; }}
 .ring small {{ display:block; color:#dbeafe; font-size:10px; margin-top:2px; }}
-.meta {{ display:grid; grid-template-columns:1fr 1fr; column-gap:16px; row-gap:7px; color:#dbeafe; font-size:12.5px; }}
+.meta {{ display:grid; grid-template-columns:1fr 1fr; column-gap:20px; row-gap:9px; color:#dbeafe; font-size:13px; }}
 .meta span {{ display:block; color:#7892b8; font-size:11px; }}
-.shared {{ position:absolute; left:360px; right:270px; bottom:62px; border:1.5px dashed #f59e0b; border-radius:18px; padding:48px 22px 22px 22px; min-height:210px; box-sizing:border-box; background:rgba(245,158,11,.04); }}
-.shared h3 {{ position:absolute; top:16px; left:22px; margin:0; color:#fbbf24; font-size:17px; }}
-.shared .grid {{ grid-template-columns:repeat(3, minmax(0,1fr)); }}
-.wip-lane {{ position:absolute; left:360px; right:270px; bottom:300px; height:90px; border:1px solid #334155; border-radius:14px; background:#111827; display:grid; place-items:center; color:#93c5fd; font-weight:700; }}
-.arrow {{ position:absolute; color:#64748b; font-size:38px; }}
-.a1 {{ left:200px; top:283px; }} .a2 {{ left:728px; top:283px; }} .a3 {{ right:228px; top:323px; transform:rotate(-25deg); }}
-.legend {{ position:absolute; left:30px; bottom:24px; display:flex; gap:22px; color:#cbd5e1; font-size:13px; }}
+.flow-row {{ display:grid; grid-template-columns: 180px 1fr 180px; gap:34px; margin:34px 0; align-items:center; }}
+.wip-lane {{ height:100px; border:1px solid #334155; border-radius:16px; background:#111827; display:grid; place-items:center; color:#93c5fd; font-weight:800; font-size:17px; }}
+.shared {{ border:1.5px dashed #f59e0b; border-radius:18px; padding:28px; background:rgba(245,158,11,.04); margin:0 214px; }}
+.shared h3 {{ margin:0 0 22px; color:#fbbf24; font-size:17px; }}
+.shared-grid {{ display:grid; grid-template-columns:repeat(3, minmax(230px, 1fr)); gap:28px; }}
+.legend {{ margin-top:28px; display:flex; gap:26px; color:#cbd5e1; font-size:13px; }}
 .legend span:before {{ content:""; display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:7px; background:var(--c); }}
-@media(max-width:1500px) {{ .floor {{ transform:scale(.86); transform-origin:top left; width:116%; }} }}
+@media(max-width:1500px) {{
+  .floor {{ min-width:1600px; }}
+}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="floor">
-    <div class="floor-title">Factory floor live layout</div>
+<div class="floor">
+  <div class="floor-title">Factory floor live layout</div>
+  <div class="main-grid">
     <div class="support">
       <div class="zone-box">Raw material<br>storage</div>
       <div class="zone-box">Coil + sheet<br>storage</div>
       <div class="zone-box">Maintenance<br>tools</div>
     </div>
+    <section class="line l1"><h3>LINE 1 · RECTANGULAR DUCTS</h3><div class="line-grid">{cards_for('Line 1')}</div></section>
+    <section class="line l2"><h3>LINE 2 · ROUND / SPIRAL</h3><div class="line-grid">{cards_for('Line 2')}</div></section>
+    <section class="line l3"><h3>LINE 3 · CUSTOM / WELDED</h3><div class="line-grid">{cards_for('Line 3')}</div></section>
     <div class="output">
       <div class="zone-box">Finished goods<br>+ QA</div>
       <div class="zone-box">Scrap / resale<br>material</div>
     </div>
-    <div class="arrow a1">→</div><div class="arrow a2">→</div><div class="arrow a3">→</div>
-    <section class="line line1 l1"><h3>LINE 1 · RECTANGULAR DUCTS</h3><div class="grid">{cards_for('Line 1')}</div></section>
-    <section class="line line2 l2"><h3>LINE 2 · ROUND / SPIRAL</h3><div class="grid">{cards_for('Line 2')}</div></section>
-    <section class="line line3 l3"><h3>LINE 3 · CUSTOM / WELDED</h3><div class="grid">{cards_for('Line 3')}</div></section>
+  </div>
+
+  <div class="flow-row">
+    <div></div>
     <div class="wip-lane">Assembly / WIP staging lane</div>
-    <section class="shared"><h3>SHARED RESOURCES</h3><div class="grid">{cards_for('Shared')}</div></section>
-    <div class="legend">
-      <span style="--c:#22c55e">Running</span><span style="--c:#f59e0b">Idle</span><span style="--c:#ef4444">Down</span><span style="--c:#94a3b8">Planned</span>
-    </div>
+    <div></div>
+  </div>
+
+  <section class="shared">
+    <h3>SHARED RESOURCES</h3>
+    <div class="shared-grid">{cards_for('Shared')}</div>
+  </section>
+
+  <div class="legend">
+    <span style="--c:#22c55e">Running</span><span style="--c:#f59e0b">Idle</span><span style="--c:#ef4444">Down</span><span style="--c:#94a3b8">Planned</span>
   </div>
 </div>
 </body>
@@ -159,7 +166,7 @@ body {{ margin:0; background:#0b0f16; color:#f8fafc; font-family:Inter, Segoe UI
 """
 
 st.subheader("Factory floor live layout")
-components.html(layout_html, height=980, scrolling=False)
+components.html(layout_html, height=1220, scrolling=True)
 
 left, right = st.columns([1, 1.35])
 with left:
