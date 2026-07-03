@@ -1,0 +1,10 @@
+job_id,product,line,current_stage,status,progress,due,completed_at
+JOB-1024,Rectangular duct,Line 1,Beading,WIP,65%,Today 14:00,
+JOB-1025,Spiral duct,Line 2,Rolling,WIP,45%,Today 16:30,
+JOB-1026,Rectangular duct,Line 1,Seaming,WIP,80%,Tomorrow 09:00,
+JOB-1027,Custom bracket,Line 3,Punching,WIP,30%,Tomorrow 13:00,
+JOB-1028,Spiral duct,Line 2,Beading,WIP,55%,Tomorrow 15:30,
+JOB-1029,Custom panel,Line 3,Cutting,WIP,20%,Tomorrow 16:00,
+JOB-1020,Rectangular duct,Line 1,Complete,Complete,100%,,Today 09:15
+JOB-1021,Spiral duct,Line 2,Complete,Complete,100%,,Today 08:40
+JOB-1022,Custom part,Line 3,Complete,Complete,100%,,Today 08:10

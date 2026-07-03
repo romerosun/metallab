@@ -1,0 +1,12 @@
+machine,line,status,utilization,current_job
+CNC Plasma Cutting Table,Shared,Running,88,JOB-1029
+Hydraulic Pan Brake,Shared,Running,64,JOB-1024
+Pittsburgh Lock Rollformer #1,Line 1,Running,78,JOB-1024
+Pittsburgh Lock / TDC Rollformer #2,Line 1,Idle,35,None
+Beading / Crimping Machine,Shared,Running,72,JOB-1028
+Duct Seaming Machine,Line 1,Running,68,JOB-1026
+3-Roll Plate Roller #1,Line 2,Running,74,JOB-1025
+3-Roll Plate Bending Machine #2,Line 2,Idle,41,None
+Mechanical Power Press,Line 3,Running,59,JOB-1027
+Hydraulic Ironworker,Line 3,Maintenance,20,None
+Welding Station,Line 3,Down,0,Planned acquisition
