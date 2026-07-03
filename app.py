@@ -1,142 +1,161 @@
-import streamlit as st
-import pandas as pd
 from pathlib import Path
-from html import escape
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 
 st.set_page_config(page_title="Factory Dashboard", layout="wide")
 BASE = Path(__file__).parent
 machines = pd.read_csv(BASE / "machines.csv")
 jobs = pd.read_csv(BASE / "jobs.csv")
 
-STATUS = {"Running": "#22c55e", "Idle": "#f59e0b", "Down": "#ef4444", "Maintenance": "#94a3b8", "Planned": "#94a3b8"}
-LINE_BG = {"line1": "#eff6ff", "line2": "#f0fdf4", "line3": "#faf5ff", "shared": "#fffbeb"}
-LINE_BORDER = {"line1": "#60a5fa", "line2": "#4ade80", "line3": "#c084fc", "shared": "#f59e0b"}
+STATUS_COLOR = {
+    "Running": "#22c55e",
+    "Idle": "#f59e0b",
+    "Down": "#ef4444",
+    "Maintenance": "#94a3b8",
+    "Planned": "#94a3b8",
+}
 
-st.markdown("""
-<style>
-.block-container {padding-top: 1.4rem; max-width: 1600px;}
-.kpi {border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#fff; min-height:92px;}
-.kpi-label {font-size:0.78rem; color:#64748b; margin-bottom:8px;}
-.kpi-value {font-size:1.55rem; font-weight:750; color:#0f172a; line-height:1.15;}
-.kpi-note {font-size:0.72rem; color:#64748b; margin-top:7px;}
-.floor {border:2px solid #9ca3af; border-radius:8px; padding:16px; background:#fbfbfb; margin-top:8px;}
-.layout-grid {display:grid; grid-template-columns: 120px 1.25fr 1fr 1fr 120px; gap:12px; align-items:stretch;}
-.support {border:1px solid #d1d5db; border-radius:10px; padding:10px; background:#fff; font-size:0.72rem; color:#374151; display:flex; align-items:center; justify-content:center; text-align:center; min-height:74px; margin-bottom:12px;}
-.zone {border:1.5px dashed; border-radius:12px; padding:10px; min-height:310px;}
-.zone-title {font-size:0.75rem; font-weight:800; text-align:center; margin-bottom:10px; letter-spacing:.02em;}
-.machine-grid {display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px;}
-.shared-grid {display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px;}
-.machine {border:1px solid #e5e7eb; border-radius:12px; background:#fff; padding:10px; min-height:130px; box-sizing:border-box;}
-.machine-head {display:flex; justify-content:space-between; gap:8px; align-items:flex-start; margin-bottom:7px;}
-.machine-name {font-size:0.74rem; font-weight:800; color:#111827; line-height:1.2;}
-.dot {width:9px; height:9px; border-radius:50%; display:inline-block; flex:0 0 auto; margin-top:2px;}
-.circles {display:flex; gap:12px; align-items:center; margin:8px 0;}
-.circle {width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.76rem; font-weight:800; color:#111827;}
-.circle-inner {width:40px; height:40px; border-radius:50%; background:white; display:flex; align-items:center; justify-content:center;}
-.circle-label {font-size:0.60rem; color:#64748b; text-align:center; margin-top:2px;}
-.time {font-size:0.65rem; color:#64748b; line-height:1.35;}
-.shared-zone {margin:12px 132px 0 132px; min-height:0;}
-.legend {display:flex; gap:18px; font-size:0.75rem; color:#475569; margin-top:10px; flex-wrap:wrap;}
-@media (max-width: 1100px) {.layout-grid {grid-template-columns:1fr;} .shared-zone {margin:12px 0 0 0;} .shared-grid {grid-template-columns:1fr;} .machine-grid {grid-template-columns:1fr;}}
-</style>
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <style>
+    .block-container {padding-top: 1.2rem; max-width: 1500px;}
+    div[data-testid="stMetric"] {border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px; background: white;}
+    div[data-testid="stMetricLabel"] {font-size: 0.82rem; color: #64748b;}
+    div[data-testid="stMetricValue"] {font-size: 1.45rem;}
+    .small {font-size: 0.78rem; color: #64748b;}
+    .machine-title {font-weight: 700; font-size: 0.88rem; line-height: 1.2;}
+    .status-dot {height: 9px; width: 9px; border-radius: 50%; display: inline-block; margin-right: 6px;}
+    .zone-title {font-weight: 800; font-size: .88rem; margin: .2rem 0 .6rem 0;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-active_jobs = len(jobs[~jobs["status"].isin(["Complete", "Cancelled"])])
-complete_today = len(jobs[jobs["status"] == "Complete"])
-overall_util = round(machines[machines["status"] != "Planned"]["utilization"].mean())
+
+def donut(value: float, label: str, color: str):
+    value = max(0, min(float(value), 100))
+    fig = go.Figure(
+        go.Pie(
+            values=[value, 100 - value],
+            hole=0.72,
+            sort=False,
+            direction="clockwise",
+            marker=dict(colors=[color, "#e5e7eb"]),
+            textinfo="none",
+            hoverinfo="skip",
+        )
+    )
+    fig.add_annotation(text=f"<b>{value:.0f}%</b><br><span style='font-size:10px'>{label}</span>", x=0.5, y=0.5, showarrow=False)
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=105, showlegend=False)
+    return fig
+
+
+def hours_donut(hours: float):
+    pct = max(0, min(float(hours) / 4 * 100, 100))
+    fig = go.Figure(
+        go.Pie(
+            values=[pct, 100 - pct],
+            hole=0.72,
+            sort=False,
+            direction="clockwise",
+            marker=dict(colors=["#64748b", "#e5e7eb"]),
+            textinfo="none",
+            hoverinfo="skip",
+        )
+    )
+    fig.add_annotation(text=f"<b>{hours:.1f}h</b><br><span style='font-size:10px'>WIP</span>", x=0.5, y=0.5, showarrow=False)
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=105, showlegend=False)
+    return fig
+
+
+def machine_card(row):
+    color = STATUS_COLOR.get(row.status, "#94a3b8")
+    with st.container(border=True):
+        c1, c2 = st.columns([5, 1])
+        c1.markdown(f"<div class='machine-title'>{int(row.id)}. {row.machine}</div>", unsafe_allow_html=True)
+        c2.markdown(f"<span class='status-dot' style='background:{color}'></span>", unsafe_allow_html=True)
+        g1, g2 = st.columns(2)
+        g1.plotly_chart(donut(row.utilization, "Util", color), use_container_width=True, config={"displayModeBar": False})
+        g2.plotly_chart(hours_donut(row.wip_hours), use_container_width=True, config={"displayModeBar": False})
+        st.markdown(
+            f"<div class='small'>Started: {row.started_at}<br>Updated: {row.last_updated}<br>Job: <b>{row.current_job}</b><br>Status: {row.status}</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def zone(title, area, ncols=2):
+    with st.container(border=True):
+        st.markdown(f"<div class='zone-title'>{title}</div>", unsafe_allow_html=True)
+        subset = machines[machines.area == area].reset_index(drop=True)
+        rows = [subset.iloc[i : i + ncols] for i in range(0, len(subset), ncols)]
+        for chunk in rows:
+            cols = st.columns(ncols)
+            for col, (_, row) in zip(cols, chunk.iterrows()):
+                with col:
+                    machine_card(row)
+
+
+active_jobs = len(jobs[jobs.status == "WIP"])
+completed_today = len(jobs[jobs.status == "Complete"])
+overall_util = round(machines[machines.status != "Planned"].utilization.mean())
+wip_hours = round(machines.wip_hours.sum(), 1)
 bottleneck = machines.sort_values("utilization", ascending=False).iloc[0]
-wip_hours = round(machines["wip_hours"].sum(), 1)
 
 st.title("Factory Dashboard")
 st.caption("Mock live dashboard for duct manufacturing")
 
-cols = st.columns(5)
-items = [
-    ("Overall utilization", f"{overall_util}%", "Average active machine load"),
-    ("Active jobs", active_jobs, "Open jobs in production"),
-    ("WIP hours", f"{wip_hours}h", "Estimated work in progress"),
-    ("Completed today", complete_today, "Finished and sent to QA"),
-    ("Bottleneck", bottleneck["machine"], f"{bottleneck['utilization']}% utilization"),
-]
-for col, (label, value, note) in zip(cols, items):
-    col.markdown(f"<div class='kpi'><div class='kpi-label'>{escape(str(label))}</div><div class='kpi-value'>{escape(str(value))}</div><div class='kpi-note'>{escape(str(note))}</div></div>", unsafe_allow_html=True)
+k1, k2, k3, k4, k5 = st.columns(5)
+k1.metric("Overall utilization", f"{overall_util}%", "Average active load")
+k2.metric("Active jobs", active_jobs, "Open jobs")
+k3.metric("WIP hours", f"{wip_hours}h", "Estimated work")
+k4.metric("Completed today", completed_today, "Sent to QA")
+k5.metric("Bottleneck", bottleneck.machine, f"{bottleneck.utilization}% utilization")
 
-st.markdown("### Factory floor live layout")
+st.subheader("Factory floor live layout")
 
-def machine_card(row):
-    status_color = STATUS.get(str(row.status), "#94a3b8")
-    util = int(row.utilization)
-    hours = float(row.wip_hours)
-    util_deg = max(0, min(util, 100)) * 3.6
-    hour_deg = max(0, min(hours / 4, 1)) * 360
-    return f"""
-    <div class='machine'>
-      <div class='machine-head'>
-        <div class='machine-name'>{escape(str(row.id))}. {escape(str(row.machine))}</div>
-        <span class='dot' style='background:{status_color}'></span>
-      </div>
-      <div class='circles'>
-        <div><div class='circle' style='background:conic-gradient({status_color} {util_deg}deg, #e5e7eb 0deg)'><div class='circle-inner'>{util}%</div></div><div class='circle-label'>Util</div></div>
-        <div><div class='circle' style='background:conic-gradient(#64748b {hour_deg}deg, #e5e7eb 0deg)'><div class='circle-inner'>{hours:.1f}h</div></div><div class='circle-label'>WIP</div></div>
-      </div>
-      <div class='time'>Started: {escape(str(row.started_at))}<br>Updated: {escape(str(row.last_updated))}<br>Job: <b>{escape(str(row.current_job))}</b></div>
-    </div>
-    """
+with st.container(border=True):
+    left, center, right = st.columns([0.7, 4.5, 0.8])
+    with left:
+        st.markdown("**Support**")
+        st.info("Raw material storage")
+        st.info("Coil + sheet storage")
+        st.info("Maintenance tools")
+    with center:
+        z1, z2, z3 = st.columns([1.25, 1, 1])
+        with z1:
+            zone("LINE 1 · RECTANGULAR DUCTS", "line1", 2)
+        with z2:
+            zone("LINE 2 · ROUND / SPIRAL", "line2", 1)
+        with z3:
+            zone("LINE 3 · CUSTOM / WELDED", "line3", 1)
+        zone("SHARED RESOURCES · ALL LINES", "shared", 3)
+    with right:
+        st.markdown("**Output**")
+        st.success("Finished goods + QA")
+        st.warning("Scrap / resale material")
 
-def zone(area, title):
-    subset = machines[machines["area"] == area]
-    cards = "".join(machine_card(r) for r in subset.itertuples())
-    return f"<div class='zone' style='background:{LINE_BG[area]}; border-color:{LINE_BORDER[area]}'><div class='zone-title'>{escape(title)}</div><div class='machine-grid'>{cards}</div></div>"
-
-shared_cards = "".join(machine_card(r) for r in machines[machines["area"] == "shared"].itertuples())
-html = """
-<div class='floor'>
-  <div class='layout-grid'>
-    <div>
-      <div class='support'>Raw material<br>storage</div>
-      <div class='support'>Coil + sheet<br>storage</div>
-      <div class='support'>Maintenance<br>tools</div>
-    </div>
-    {line1}
-    {line2}
-    {line3}
-    <div>
-      <div class='support'>Finished goods<br>+ QA</div>
-      <div class='support'>Scrap / resale<br>material</div>
-    </div>
-  </div>
-  <div class='zone shared-zone' style='background:{shared_bg}; border-color:{shared_border};'>
-    <div class='zone-title'>SHARED RESOURCES</div>
-    <div class='shared-grid'>{shared_cards}</div>
-  </div>
-  <div class='legend'>
-    <span><span class='dot' style='background:#22c55e'></span> Running</span>
-    <span><span class='dot' style='background:#f59e0b'></span> Idle</span>
-    <span><span class='dot' style='background:#ef4444'></span> Down</span>
-    <span><span class='dot' style='background:#94a3b8'></span> Planned / Maintenance</span>
-  </div>
-</div>
-""".format(
-    line1=zone("line1", "LINE 1 - RECTANGULAR DUCTS"),
-    line2=zone("line2", "LINE 2 - ROUND / SPIRAL DUCTS"),
-    line3=zone("line3", "LINE 3 - CUSTOM / WELDED PARTS"),
-    shared_bg=LINE_BG["shared"],
-    shared_border=LINE_BORDER["shared"],
-    shared_cards=shared_cards,
-)
-st.markdown(html, unsafe_allow_html=True)
-
-st.markdown("### Production lists")
-left, right = st.columns(2)
-with left:
-    st.dataframe(jobs[jobs["status"] == "WIP"][["job_id", "product", "line", "current_stage", "progress", "started_at", "last_updated", "due"]], use_container_width=True, hide_index=True)
-with right:
-    st.dataframe(jobs[jobs["status"] == "Complete"][["job_id", "product", "line", "completed_at"]], use_container_width=True, hide_index=True)
+st.subheader("Production lists")
+wip, complete = st.columns(2)
+with wip:
+    st.markdown("**Work in progress**")
+    st.dataframe(
+        jobs[jobs.status == "WIP"][["job_id", "product", "line", "current_stage", "progress", "started_at", "last_updated", "due"]],
+        use_container_width=True,
+        hide_index=True,
+    )
+with complete:
+    st.markdown("**Completed today**")
+    st.dataframe(
+        jobs[jobs.status == "Complete"][["job_id", "product", "line", "completed_at"]],
+        use_container_width=True,
+        hide_index=True,
+    )
 
 with st.expander("Operator update mock"):
     with st.form("operator_update"):
-        job = st.selectbox("Job", jobs[jobs["status"] == "WIP"]["job_id"])
+        job = st.selectbox("Job", jobs[jobs.status == "WIP"].job_id)
         stage = st.selectbox("New stage", ["Cutting", "Forming", "Beading", "Seaming", "Welding", "Assembly", "QA", "Complete"])
         submitted = st.form_submit_button("Mark update")
         if submitted:
-            st.success(f"Mock update: {job} → {stage}. Future version will save this to a database.")
+            st.success(f"Mock update: {job} → {stage}. Future version can save this to a database.")

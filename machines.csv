@@ -1,12 +1,12 @@
-id,machine,line,status,utilization,wip_hours,current_job,started_at,last_updated,area
-1,CNC Plasma Cutting Table,Shared,Running,88,3.2,JOB-1029,07:30,10:24,shared
-2,Hydraulic Pan Brake,Shared,Idle,65,1.2,JOB-1024,09:00,10:18,shared
-3,Pittsburgh Lock Rollformer #1,Line 1,Running,82,2.1,JOB-1024,08:05,10:22,line1
-4,Pittsburgh Lock / TDC Rollformer #2,Line 1,Running,74,1.6,JOB-1030,08:10,10:20,line1
-5,Beading / Crimping Machine,Shared,Running,68,0.9,JOB-1028,09:15,10:21,shared
-6,Duct Seaming Machine,Line 1,Idle,60,1.4,JOB-1026,09:05,10:19,line1
-7,3-Roll Plate Roller #1,Line 2,Running,75,1.8,JOB-1025,08:30,10:23,line2
-8,3-Roll Plate Bending Machine #2,Line 2,Running,69,1.1,JOB-1031,08:45,10:17,line2
-9,Mechanical Power Press,Line 3,Running,63,0.7,JOB-1027,09:20,10:16,line3
-10,Hydraulic Ironworker,Line 3,Idle,58,0.5,None,09:25,10:15,line3
-11,Welding Station,Line 3,Planned,0,0.0,Planned acquisition,-,-,line3
+id,machine,line,status,utilization,wip_hours,current_job,started_at,last_updated,area,x,y
+1,CNC Plasma Cutting Table,Shared,Running,88,3.2,JOB-1029,07:30,10:24,shared,2,5
+2,Hydraulic Pan Brake,Shared,Idle,65,1.2,JOB-1024,09:00,10:18,shared,5,5
+3,Pittsburgh Lock Rollformer #1,Line 1,Running,82,2.1,JOB-1024,08:05,10:22,line1,2,2
+4,Pittsburgh Lock / TDC Rollformer #2,Line 1,Running,74,1.6,JOB-1030,08:10,10:20,line1,4,2
+5,Beading / Crimping Machine,Shared,Running,68,0.9,JOB-1028,09:15,10:21,shared,7,5
+6,Duct Seaming Machine,Line 1,Idle,60,1.4,JOB-1026,09:05,10:19,line1,6,2
+7,3-Roll Plate Roller #1,Line 2,Running,75,1.8,JOB-1025,08:30,10:23,line2,2,3
+8,3-Roll Plate Bending Machine #2,Line 2,Running,69,1.1,JOB-1031,08:45,10:17,line2,4,3
+9,Mechanical Power Press,Line 3,Running,63,0.7,JOB-1027,09:20,10:16,line3,2,4
+10,Hydraulic Ironworker,Line 3,Idle,58,0.5,None,09:25,10:15,line3,4,4
+11,Welding Station,Line 3,Planned,0,0.0,Planned acquisition,-,-,line3,6,4
