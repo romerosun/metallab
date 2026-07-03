@@ -1,12 +1,14 @@
-# Duct Factory Dashboard Mock
+# Duct Manufacturing Dashboard
 
-Streamlit mock dashboard for a duct manufacturing floor.
+Minimal Streamlit mock dashboard for a duct manufacturing workshop.
 
 ## Run locally
+
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
 ## Deploy
-Upload these files to GitHub, then connect the repo in Streamlit Community Cloud.
+
+Upload this folder to GitHub, then connect the repo in Streamlit Community Cloud.

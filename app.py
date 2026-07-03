@@ -5,8 +5,6 @@ import streamlit as st
 
 st.set_page_config(page_title="Factory Dashboard", layout="wide")
 BASE = Path(__file__).parent
-machines = pd.read_csv(BASE / "machines.csv")
-jobs = pd.read_csv(BASE / "jobs.csv")
 
 STATUS_COLOR = {
     "Running": "#22c55e",
@@ -15,85 +13,106 @@ STATUS_COLOR = {
     "Maintenance": "#94a3b8",
     "Planned": "#94a3b8",
 }
+LINE_COLOR = {
+    "Line 1": "#3b82f6",
+    "Line 2": "#22c55e",
+    "Line 3": "#a855f7",
+    "Shared": "#f59e0b",
+}
+
+@st.cache_data
+def load_data():
+    return pd.read_csv(BASE / "machines.csv"), pd.read_csv(BASE / "jobs.csv")
+
+machines, jobs = load_data()
 
 st.markdown(
     """
     <style>
-    .block-container {padding-top: 1.2rem; max-width: 1500px;}
-    div[data-testid="stMetric"] {border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px; background: white;}
-    div[data-testid="stMetricLabel"] {font-size: 0.82rem; color: #64748b;}
-    div[data-testid="stMetricValue"] {font-size: 1.45rem;}
-    .small {font-size: 0.78rem; color: #64748b;}
-    .machine-title {font-weight: 700; font-size: 0.88rem; line-height: 1.2;}
-    .status-dot {height: 9px; width: 9px; border-radius: 50%; display: inline-block; margin-right: 6px;}
-    .zone-title {font-weight: 800; font-size: .88rem; margin: .2rem 0 .6rem 0;}
+    .block-container {padding-top: 1.2rem; max-width: 1560px;}
+    div[data-testid="stMetric"] {border: 1px solid #262b36; border-radius: 16px; padding: 14px; background: #10141c;}
+    div[data-testid="stMetricLabel"] {font-size: .82rem; color: #9ca3af;}
+    div[data-testid="stMetricValue"] {font-size: 1.35rem;}
+    .small-note {font-size: .78rem; color: #94a3b8;}
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 
-def donut(value: float, label: str, color: str):
-    value = max(0, min(float(value), 100))
-    fig = go.Figure(
-        go.Pie(
-            values=[value, 100 - value],
-            hole=0.72,
-            sort=False,
-            direction="clockwise",
-            marker=dict(colors=[color, "#e5e7eb"]),
-            textinfo="none",
-            hoverinfo="skip",
-        )
+def donut(value, label, color="#22c55e", suffix="%", max_value=100):
+    value = float(value)
+    pct = max(0, min(value / max_value * 100, 100))
+    fig = go.Figure(go.Pie(
+        values=[pct, 100 - pct],
+        hole=0.76,
+        sort=False,
+        direction="clockwise",
+        marker=dict(colors=[color, "#263040"]),
+        textinfo="none",
+        hoverinfo="skip",
+    ))
+    fig.add_annotation(
+        text=f"<b>{value:g}{suffix}</b><br><span style='font-size:10px'>{label}</span>",
+        x=0.5, y=0.5, showarrow=False, font=dict(color="#f8fafc", size=12)
     )
-    fig.add_annotation(text=f"<b>{value:.0f}%</b><br><span style='font-size:10px'>{label}</span>", x=0.5, y=0.5, showarrow=False)
-    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=105, showlegend=False)
+    fig.update_layout(height=120, margin=dict(l=0, r=0, t=0, b=0), showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
     return fig
 
 
-def hours_donut(hours: float):
-    pct = max(0, min(float(hours) / 4 * 100, 100))
-    fig = go.Figure(
-        go.Pie(
-            values=[pct, 100 - pct],
-            hole=0.72,
-            sort=False,
-            direction="clockwise",
-            marker=dict(colors=["#64748b", "#e5e7eb"]),
-            textinfo="none",
-            hoverinfo="skip",
+def metric_card(title, value, note, circle_value=None, color="#22c55e", suffix="%", max_value=100):
+    with st.container(border=True):
+        left, right = st.columns([1.4, 1])
+        left.caption(title)
+        left.subheader(value)
+        left.markdown(f"<div class='small-note'>{note}</div>", unsafe_allow_html=True)
+        if circle_value is not None:
+            right.plotly_chart(donut(circle_value, "", color=color, suffix=suffix, max_value=max_value), use_container_width=True, config={"displayModeBar": False})
+
+
+def factory_layout(df):
+    fig = go.Figure()
+
+    # Building walls and support/output zones
+    fig.add_shape(type="rect", x0=0, y0=0, x1=12, y1=9, line=dict(color="#64748b", width=3), fillcolor="#0b0f16")
+    zones = [
+        (0.3, 7.2, 1.3, 1.1, "Raw\nMaterial", "#132338"),
+        (0.3, 5.7, 1.3, 1.1, "Coil +\nSheets", "#132338"),
+        (0.3, 4.2, 1.3, 1.1, "Tools", "#132338"),
+        (10.6, 7.2, 1.1, 1.1, "Finished\nGoods + QA", "#12331f"),
+        (10.6, 5.7, 1.1, 1.1, "Scrap /\nResale", "#36340d"),
+        (1.9, 1.0, 8.2, 0.8, "Assembly / WIP staging lane", "#111827"),
+    ]
+    for x, y, w, h, txt, fill in zones:
+        fig.add_shape(type="rect", x0=x, y0=y, x1=x+w, y1=y+h, line=dict(color="#334155", width=1), fillcolor=fill)
+        fig.add_annotation(x=x+w/2, y=y+h/2, text=txt, showarrow=False, font=dict(size=11, color="#e5e7eb"))
+
+    # Flow arrows
+    arrows = [(1.7, 7.7, 1.95, 7.3), (3.7, 7.3, 4.15, 7.3), (6.1, 6.4, 6.4, 6.0), (10.2, 6.4, 10.55, 7.7)]
+    for x0, y0, x1, y1 in arrows:
+        fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y", showarrow=True, arrowhead=3, arrowsize=1.1, arrowwidth=1.5, arrowcolor="#64748b")
+
+    # Machine boxes
+    for _, r in df.iterrows():
+        color = STATUS_COLOR.get(r.status, "#94a3b8")
+        line_color = LINE_COLOR.get(r.line, "#64748b")
+        fig.add_shape(
+            type="rect", x0=r.x, y0=r.y, x1=r.x+r.w, y1=r.y+r.h,
+            line=dict(color=line_color, width=2), fillcolor="#10141c", opacity=1
         )
-    )
-    fig.add_annotation(text=f"<b>{hours:.1f}h</b><br><span style='font-size:10px'>WIP</span>", x=0.5, y=0.5, showarrow=False)
-    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=105, showlegend=False)
+        fig.add_trace(go.Scatter(
+            x=[r.x + .18], y=[r.y + r.h - .18], mode="markers",
+            marker=dict(size=11, color=color), hoverinfo="skip", showlegend=False
+        ))
+        label = f"<b>{int(r.id)}. {r.machine}</b><br>{r.utilization}% util | {r.wip_hours}h WIP<br>{r.current_job}"
+        fig.add_annotation(x=r.x+r.w/2, y=r.y+r.h/2+.05, text=label, showarrow=False, align="center", font=dict(size=10, color="#f8fafc"))
+        fig.add_annotation(x=r.x+r.w/2, y=r.y+.12, text=f"Updated {r.last_updated}", showarrow=False, font=dict(size=9, color="#94a3b8"))
+
+    fig.add_annotation(x=6, y=8.75, text="Factory floor mock layout", showarrow=False, font=dict(size=14, color="#f8fafc"))
+    fig.update_xaxes(visible=False, range=[0, 12])
+    fig.update_yaxes(visible=False, range=[0, 9], scaleanchor="x", scaleratio=1)
+    fig.update_layout(height=650, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=False)
     return fig
-
-
-def machine_card(row):
-    color = STATUS_COLOR.get(row.status, "#94a3b8")
-    with st.container(border=True):
-        c1, c2 = st.columns([5, 1])
-        c1.markdown(f"<div class='machine-title'>{int(row.id)}. {row.machine}</div>", unsafe_allow_html=True)
-        c2.markdown(f"<span class='status-dot' style='background:{color}'></span>", unsafe_allow_html=True)
-        g1, g2 = st.columns(2)
-        g1.plotly_chart(donut(row.utilization, "Util", color), use_container_width=True, config={"displayModeBar": False})
-        g2.plotly_chart(hours_donut(row.wip_hours), use_container_width=True, config={"displayModeBar": False})
-        st.markdown(
-            f"<div class='small'>Started: {row.started_at}<br>Updated: {row.last_updated}<br>Job: <b>{row.current_job}</b><br>Status: {row.status}</div>",
-            unsafe_allow_html=True,
-        )
-
-
-def zone(title, area, ncols=2):
-    with st.container(border=True):
-        st.markdown(f"<div class='zone-title'>{title}</div>", unsafe_allow_html=True)
-        subset = machines[machines.area == area].reset_index(drop=True)
-        rows = [subset.iloc[i : i + ncols] for i in range(0, len(subset), ncols)]
-        for chunk in rows:
-            cols = st.columns(ncols)
-            for col, (_, row) in zip(cols, chunk.iterrows()):
-                with col:
-                    machine_card(row)
 
 
 active_jobs = len(jobs[jobs.status == "WIP"])
@@ -101,61 +120,54 @@ completed_today = len(jobs[jobs.status == "Complete"])
 overall_util = round(machines[machines.status != "Planned"].utilization.mean())
 wip_hours = round(machines.wip_hours.sum(), 1)
 bottleneck = machines.sort_values("utilization", ascending=False).iloc[0]
+throughput = completed_today
 
 st.title("Factory Dashboard")
-st.caption("Mock live dashboard for duct manufacturing")
+st.caption("Minimal mock live dashboard for duct manufacturing")
 
-k1, k2, k3, k4, k5 = st.columns(5)
-k1.metric("Overall utilization", f"{overall_util}%", "Average active load")
-k2.metric("Active jobs", active_jobs, "Open jobs")
-k3.metric("WIP hours", f"{wip_hours}h", "Estimated work")
-k4.metric("Completed today", completed_today, "Sent to QA")
-k5.metric("Bottleneck", bottleneck.machine, f"{bottleneck.utilization}% utilization")
+k1, k2, k3, k4, k5, k6 = st.columns(6)
+with k1: metric_card("Utilization", f"{overall_util}%", "Average active load", overall_util)
+with k2: metric_card("WIP hours", f"{wip_hours}h", "Estimated work", wip_hours, "#64748b", "h", 20)
+with k3: metric_card("Active jobs", str(active_jobs), "Open production jobs")
+with k4: metric_card("Completed", str(completed_today), "Finished today")
+with k5: metric_card("Throughput", str(throughput), "Jobs/day mock")
+with k6: metric_card("Bottleneck", bottleneck.machine[:18] + "...", f"{bottleneck.utilization}% utilization")
 
 st.subheader("Factory floor live layout")
+st.plotly_chart(factory_layout(machines), use_container_width=True, config={"displayModeBar": False})
 
-with st.container(border=True):
-    left, center, right = st.columns([0.7, 4.5, 0.8])
-    with left:
-        st.markdown("**Support**")
-        st.info("Raw material storage")
-        st.info("Coil + sheet storage")
-        st.info("Maintenance tools")
-    with center:
-        z1, z2, z3 = st.columns([1.25, 1, 1])
-        with z1:
-            zone("LINE 1 · RECTANGULAR DUCTS", "line1", 2)
-        with z2:
-            zone("LINE 2 · ROUND / SPIRAL", "line2", 1)
-        with z3:
-            zone("LINE 3 · CUSTOM / WELDED", "line3", 1)
-        zone("SHARED RESOURCES · ALL LINES", "shared", 3)
-    with right:
-        st.markdown("**Output**")
-        st.success("Finished goods + QA")
-        st.warning("Scrap / resale material")
+left, right = st.columns([0.9, 1.1])
+with left:
+    st.subheader("Machine details")
+    choices = machines.apply(lambda r: f"{int(r.id)} · {r.machine}", axis=1).tolist()
+    selected = st.selectbox("Select machine", choices, label_visibility="collapsed")
+    mid = int(selected.split(" · ")[0])
+    m = machines[machines.id == mid].iloc[0]
+    c1, c2 = st.columns(2)
+    c1.plotly_chart(donut(m.utilization, "Utilization", STATUS_COLOR.get(m.status, "#94a3b8")), use_container_width=True, config={"displayModeBar": False})
+    c2.plotly_chart(donut(m.wip_hours, "WIP", "#64748b", "h", 4), use_container_width=True, config={"displayModeBar": False})
+    st.write(f"**Status:** {m.status}")
+    st.write(f"**Current job:** {m.current_job}")
+    st.write(f"**Operator:** {m.operator}")
+    st.write(f"**Started:** {m.started_at}")
+    st.write(f"**Last updated:** {m.last_updated}")
+    st.write(f"**Expected finish:** {m.expected_finish}")
 
-st.subheader("Production lists")
-wip, complete = st.columns(2)
-with wip:
-    st.markdown("**Work in progress**")
-    st.dataframe(
-        jobs[jobs.status == "WIP"][["job_id", "product", "line", "current_stage", "progress", "started_at", "last_updated", "due"]],
-        use_container_width=True,
-        hide_index=True,
-    )
-with complete:
-    st.markdown("**Completed today**")
-    st.dataframe(
-        jobs[jobs.status == "Complete"][["job_id", "product", "line", "completed_at"]],
-        use_container_width=True,
-        hide_index=True,
-    )
+with right:
+    st.subheader("Production lists")
+    tab1, tab2 = st.tabs(["WIP", "Completed"])
+    with tab1:
+        st.dataframe(jobs[jobs.status == "WIP"][["job_id", "product", "line", "current_stage", "progress", "started_at", "last_updated", "due"]], use_container_width=True, hide_index=True)
+    with tab2:
+        st.dataframe(jobs[jobs.status == "Complete"][["job_id", "product", "line", "completed_at"]], use_container_width=True, hide_index=True)
 
-with st.expander("Operator update mock"):
-    with st.form("operator_update"):
-        job = st.selectbox("Job", jobs[jobs.status == "WIP"].job_id)
-        stage = st.selectbox("New stage", ["Cutting", "Forming", "Beading", "Seaming", "Welding", "Assembly", "QA", "Complete"])
-        submitted = st.form_submit_button("Mark update")
-        if submitted:
-            st.success(f"Mock update: {job} → {stage}. Future version can save this to a database.")
+st.subheader("Operator phone input mock")
+with st.form("operator_update", border=True):
+    a, b, c, d = st.columns([1, 1, 1, 1])
+    job = a.selectbox("Job", jobs[jobs.status == "WIP"].job_id)
+    machine = b.selectbox("Machine", machines.machine)
+    action = c.selectbox("Action", ["Start", "Pause", "Resume", "Complete stage", "Send to QA"])
+    note = d.text_input("Note", placeholder="optional")
+    submitted = st.form_submit_button("Submit mock update")
+    if submitted:
+        st.success(f"Mock saved: {job} · {machine} · {action}. Later this can write to PostgreSQL/Firebase/Supabase.")
