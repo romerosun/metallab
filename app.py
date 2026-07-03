@@ -1,10 +1,14 @@
 from pathlib import Path
+import html
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Factory Dashboard", layout="wide")
+st.set_page_config(page_title="Factory Dashboard", layout="wide", initial_sidebar_state="collapsed")
 BASE = Path(__file__).parent
+
+machines = pd.read_csv(BASE / "machines.csv")
+jobs = pd.read_csv(BASE / "jobs.csv")
 
 STATUS_COLOR = {
     "Running": "#22c55e",
@@ -13,145 +17,166 @@ STATUS_COLOR = {
     "Maintenance": "#94a3b8",
     "Planned": "#94a3b8",
 }
-LINE_COLOR = {
-    "Line 1": "#3b82f6",
-    "Line 2": "#22c55e",
-    "Line 3": "#a855f7",
-    "Shared": "#f59e0b",
-}
+LINE_COLOR = {"Line 1": "#3b82f6", "Line 2": "#22c55e", "Line 3": "#a855f7", "Shared": "#f59e0b"}
 
-@st.cache_data
-def load_data():
-    return pd.read_csv(BASE / "machines.csv"), pd.read_csv(BASE / "jobs.csv")
-
-machines, jobs = load_data()
-
-st.markdown(
-    """
-    <style>
-    .block-container {padding-top: 1.2rem; max-width: 1560px;}
-    div[data-testid="stMetric"] {border: 1px solid #262b36; border-radius: 16px; padding: 14px; background: #10141c;}
-    div[data-testid="stMetricLabel"] {font-size: .82rem; color: #9ca3af;}
-    div[data-testid="stMetricValue"] {font-size: 1.35rem;}
-    .small-note {font-size: .78rem; color: #94a3b8;}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-def donut(value, label, color="#22c55e", suffix="%", max_value=100):
-    value = float(value)
-    pct = max(0, min(value / max_value * 100, 100))
-    fig = go.Figure(go.Pie(
-        values=[pct, 100 - pct],
-        hole=0.76,
-        sort=False,
-        direction="clockwise",
-        marker=dict(colors=[color, "#263040"]),
-        textinfo="none",
-        hoverinfo="skip",
-    ))
-    fig.add_annotation(
-        text=f"<b>{value:g}{suffix}</b><br><span style='font-size:10px'>{label}</span>",
-        x=0.5, y=0.5, showarrow=False, font=dict(color="#f8fafc", size=12)
-    )
-    fig.update_layout(height=120, margin=dict(l=0, r=0, t=0, b=0), showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-    return fig
-
-
-def metric_card(title, value, note, circle_value=None, color="#22c55e", suffix="%", max_value=100):
-    with st.container(border=True):
-        left, right = st.columns([1.4, 1])
-        left.caption(title)
-        left.subheader(value)
-        left.markdown(f"<div class='small-note'>{note}</div>", unsafe_allow_html=True)
-        if circle_value is not None:
-            right.plotly_chart(donut(circle_value, "", color=color, suffix=suffix, max_value=max_value), use_container_width=True, config={"displayModeBar": False})
-
-
-def factory_layout(df):
-    fig = go.Figure()
-
-    # Building walls and support/output zones
-    fig.add_shape(type="rect", x0=0, y0=0, x1=12, y1=9, line=dict(color="#64748b", width=3), fillcolor="#0b0f16")
-    zones = [
-        (0.3, 7.2, 1.3, 1.1, "Raw\nMaterial", "#132338"),
-        (0.3, 5.7, 1.3, 1.1, "Coil +\nSheets", "#132338"),
-        (0.3, 4.2, 1.3, 1.1, "Tools", "#132338"),
-        (10.6, 7.2, 1.1, 1.1, "Finished\nGoods + QA", "#12331f"),
-        (10.6, 5.7, 1.1, 1.1, "Scrap /\nResale", "#36340d"),
-        (1.9, 1.0, 8.2, 0.8, "Assembly / WIP staging lane", "#111827"),
-    ]
-    for x, y, w, h, txt, fill in zones:
-        fig.add_shape(type="rect", x0=x, y0=y, x1=x+w, y1=y+h, line=dict(color="#334155", width=1), fillcolor=fill)
-        fig.add_annotation(x=x+w/2, y=y+h/2, text=txt, showarrow=False, font=dict(size=11, color="#e5e7eb"))
-
-    # Flow arrows
-    arrows = [(1.7, 7.7, 1.95, 7.3), (3.7, 7.3, 4.15, 7.3), (6.1, 6.4, 6.4, 6.0), (10.2, 6.4, 10.55, 7.7)]
-    for x0, y0, x1, y1 in arrows:
-        fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y", showarrow=True, arrowhead=3, arrowsize=1.1, arrowwidth=1.5, arrowcolor="#64748b")
-
-    # Machine boxes
-    for _, r in df.iterrows():
-        color = STATUS_COLOR.get(r.status, "#94a3b8")
-        line_color = LINE_COLOR.get(r.line, "#64748b")
-        fig.add_shape(
-            type="rect", x0=r.x, y0=r.y, x1=r.x+r.w, y1=r.y+r.h,
-            line=dict(color=line_color, width=2), fillcolor="#10141c", opacity=1
-        )
-        fig.add_trace(go.Scatter(
-            x=[r.x + .18], y=[r.y + r.h - .18], mode="markers",
-            marker=dict(size=11, color=color), hoverinfo="skip", showlegend=False
-        ))
-        label = f"<b>{int(r.id)}. {r.machine}</b><br>{r.utilization}% util | {r.wip_hours}h WIP<br>{r.current_job}"
-        fig.add_annotation(x=r.x+r.w/2, y=r.y+r.h/2+.05, text=label, showarrow=False, align="center", font=dict(size=10, color="#f8fafc"))
-        fig.add_annotation(x=r.x+r.w/2, y=r.y+.12, text=f"Updated {r.last_updated}", showarrow=False, font=dict(size=9, color="#94a3b8"))
-
-    fig.add_annotation(x=6, y=8.75, text="Factory floor mock layout", showarrow=False, font=dict(size=14, color="#f8fafc"))
-    fig.update_xaxes(visible=False, range=[0, 12])
-    fig.update_yaxes(visible=False, range=[0, 9], scaleanchor="x", scaleratio=1)
-    fig.update_layout(height=650, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", showlegend=False)
-    return fig
-
+st.markdown("""
+<style>
+.block-container {padding-top: 1.4rem; padding-bottom: 2rem; max-width: 1760px;}
+#MainMenu, footer, header {visibility: hidden;}
+h1 {font-size: 2.2rem; margin-bottom: .2rem;}
+.kpi-row {display:grid; grid-template-columns: repeat(5, minmax(180px, 1fr)); gap:18px; margin: 24px 0 30px 0;}
+.kpi {background:#10141c; border:1px solid #2a3140; border-radius:18px; padding:22px 24px; min-height:126px;}
+.kpi-label {color:#a8b3c7; font-size:.9rem; margin-bottom:10px;}
+.kpi-value {font-size:2rem; font-weight:800; color:#f8fafc; line-height:1;}
+.kpi-note {color:#8fb4e8; font-size:.86rem; margin-top:16px;}
+.clean-card {background:#10141c; border:1px solid #2a3140; border-radius:18px; padding:18px;}
+</style>
+""", unsafe_allow_html=True)
 
 active_jobs = len(jobs[jobs.status == "WIP"])
 completed_today = len(jobs[jobs.status == "Complete"])
 overall_util = round(machines[machines.status != "Planned"].utilization.mean())
 wip_hours = round(machines.wip_hours.sum(), 1)
 bottleneck = machines.sort_values("utilization", ascending=False).iloc[0]
-throughput = completed_today
 
 st.title("Factory Dashboard")
-st.caption("Minimal mock live dashboard for duct manufacturing")
+st.caption("Mock live dashboard for duct manufacturing")
 
-k1, k2, k3, k4, k5, k6 = st.columns(6)
-with k1: metric_card("Utilization", f"{overall_util}%", "Average active load", overall_util)
-with k2: metric_card("WIP hours", f"{wip_hours}h", "Estimated work", wip_hours, "#64748b", "h", 20)
-with k3: metric_card("Active jobs", str(active_jobs), "Open production jobs")
-with k4: metric_card("Completed", str(completed_today), "Finished today")
-with k5: metric_card("Throughput", str(throughput), "Jobs/day mock")
-with k6: metric_card("Bottleneck", bottleneck.machine[:18] + "...", f"{bottleneck.utilization}% utilization")
+st.markdown(f"""
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-label">Overall utilization</div><div class="kpi-value">{overall_util}%</div><div class="kpi-note">Average active load</div></div>
+  <div class="kpi"><div class="kpi-label">Active jobs</div><div class="kpi-value">{active_jobs}</div><div class="kpi-note">Open production jobs</div></div>
+  <div class="kpi"><div class="kpi-label">WIP hours</div><div class="kpi-value">{wip_hours}h</div><div class="kpi-note">Estimated work in progress</div></div>
+  <div class="kpi"><div class="kpi-label">Completed today</div><div class="kpi-value">{completed_today}</div><div class="kpi-note">Finished and sent to QA</div></div>
+  <div class="kpi"><div class="kpi-label">Bottleneck</div><div class="kpi-value" style="font-size:1.55rem">{html.escape(bottleneck.machine)}</div><div class="kpi-note">{int(bottleneck.utilization)}% utilization</div></div>
+</div>
+""", unsafe_allow_html=True)
+
+
+def machine_card(r):
+    status_color = STATUS_COLOR.get(str(r.status), "#94a3b8")
+    line_color = LINE_COLOR.get(str(r.line), "#64748b")
+    util = int(r.utilization)
+    wip_pct = min(float(r.wip_hours) / 4 * 100, 100)
+    name = html.escape(str(r.machine))
+    current_job = html.escape(str(r.current_job))
+    status = html.escape(str(r.status))
+    return f"""
+    <div class="machine" style="border-color:{line_color}">
+      <div class="m-top"><div class="m-name">{int(r.id)}. {name}</div><span class="dot" style="background:{status_color}"></span></div>
+      <div class="rings">
+        <div class="ring" style="--p:{util};--c:{status_color};"><div><b>{util}%</b><small>Util</small></div></div>
+        <div class="ring" style="--p:{wip_pct};--c:#8aa0bd;"><div><b>{r.wip_hours}h</b><small>WIP</small></div></div>
+      </div>
+      <div class="meta">
+        <div><span>Job</span>{current_job}</div>
+        <div><span>Started</span>{html.escape(str(r.started_at))}</div>
+        <div><span>Updated</span>{html.escape(str(r.last_updated))}</div>
+        <div><span>Status</span>{status}</div>
+      </div>
+    </div>
+    """
+
+
+def cards_for(line):
+    rows = machines[machines.line == line].sort_values("id")
+    return "".join(machine_card(r) for _, r in rows.iterrows())
+
+layout_html = f"""
+<!doctype html>
+<html>
+<head>
+<style>
+body {{ margin:0; background:#0b0f16; color:#f8fafc; font-family:Inter, Segoe UI, Arial, sans-serif; }}
+.wrap {{ width:100%; box-sizing:border-box; padding:0; }}
+.floor {{
+  position:relative; width:100%; min-height:920px; box-sizing:border-box;
+  border:2px solid #334155; border-radius:20px; background:#0d121a; overflow:hidden;
+}}
+.floor-title {{ position:absolute; top:18px; left:0; right:0; text-align:center; font-weight:800; color:#dbeafe; font-size:18px; }}
+.support {{ position:absolute; left:26px; top:90px; width:170px; display:grid; gap:22px; }}
+.output {{ position:absolute; right:26px; top:110px; width:190px; display:grid; gap:22px; }}
+.zone-box {{ border-radius:14px; padding:28px 18px; border:1px solid #334155; background:#132338; color:#60a5fa; font-weight:700; text-align:center; font-size:17px; line-height:1.35; }}
+.output .zone-box:first-child {{ background:#12331f; color:#4ade80; }}
+.output .zone-box:nth-child(2) {{ background:#36340d; color:#fde68a; }}
+.line {{ position:absolute; border:1.5px solid #334155; border-radius:18px; padding:56px 22px 22px 22px; box-sizing:border-box; }}
+.line h3 {{ position:absolute; top:18px; left:22px; margin:0; font-size:17px; letter-spacing:.02em; }}
+.line1 {{ left:225px; top:88px; width:500px; min-height:535px; }}
+.line2 {{ left:755px; top:88px; width:500px; min-height:535px; }}
+.line3 {{ left:1285px; top:88px; width:390px; min-height:680px; }}
+.l1 h3 {{ color:#60a5fa; }} .l2 h3 {{ color:#4ade80; }} .l3 h3 {{ color:#c084fc; }}
+.grid {{ display:grid; grid-template-columns:1fr 1fr; gap:22px; }}
+.line3 .grid {{ grid-template-columns:1fr; }}
+.machine {{ background:#10141c; border:2px solid; border-radius:14px; min-height:205px; padding:18px; box-sizing:border-box; }}
+.m-top {{ display:flex; justify-content:space-between; gap:10px; align-items:flex-start; margin-bottom:14px; }}
+.m-name {{ font-weight:800; line-height:1.18; font-size:15.5px; max-width:190px; }}
+.dot {{ width:12px; height:12px; border-radius:50%; display:block; flex:0 0 auto; box-shadow:0 0 0 4px rgba(255,255,255,.04); }}
+.rings {{ display:flex; gap:24px; align-items:center; margin:8px 0 16px 0; }}
+.ring {{ width:86px; height:86px; border-radius:50%; background:conic-gradient(var(--c) calc(var(--p)*1%), #e8edf5 0); position:relative; display:grid; place-items:center; }}
+.ring:after {{ content:""; position:absolute; inset:15px; background:#0b0f16; border-radius:50%; }}
+.ring div {{ position:relative; z-index:1; text-align:center; }}
+.ring b {{ display:block; font-size:15px; }}
+.ring small {{ display:block; color:#dbeafe; font-size:10px; margin-top:2px; }}
+.meta {{ display:grid; grid-template-columns:1fr 1fr; column-gap:16px; row-gap:7px; color:#dbeafe; font-size:12.5px; }}
+.meta span {{ display:block; color:#7892b8; font-size:11px; }}
+.shared {{ position:absolute; left:360px; right:270px; bottom:62px; border:1.5px dashed #f59e0b; border-radius:18px; padding:48px 22px 22px 22px; min-height:210px; box-sizing:border-box; background:rgba(245,158,11,.04); }}
+.shared h3 {{ position:absolute; top:16px; left:22px; margin:0; color:#fbbf24; font-size:17px; }}
+.shared .grid {{ grid-template-columns:repeat(3, minmax(0,1fr)); }}
+.wip-lane {{ position:absolute; left:360px; right:270px; bottom:300px; height:90px; border:1px solid #334155; border-radius:14px; background:#111827; display:grid; place-items:center; color:#93c5fd; font-weight:700; }}
+.arrow {{ position:absolute; color:#64748b; font-size:38px; }}
+.a1 {{ left:200px; top:283px; }} .a2 {{ left:728px; top:283px; }} .a3 {{ right:228px; top:323px; transform:rotate(-25deg); }}
+.legend {{ position:absolute; left:30px; bottom:24px; display:flex; gap:22px; color:#cbd5e1; font-size:13px; }}
+.legend span:before {{ content:""; display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:7px; background:var(--c); }}
+@media(max-width:1500px) {{ .floor {{ transform:scale(.86); transform-origin:top left; width:116%; }} }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="floor">
+    <div class="floor-title">Factory floor live layout</div>
+    <div class="support">
+      <div class="zone-box">Raw material<br>storage</div>
+      <div class="zone-box">Coil + sheet<br>storage</div>
+      <div class="zone-box">Maintenance<br>tools</div>
+    </div>
+    <div class="output">
+      <div class="zone-box">Finished goods<br>+ QA</div>
+      <div class="zone-box">Scrap / resale<br>material</div>
+    </div>
+    <div class="arrow a1">→</div><div class="arrow a2">→</div><div class="arrow a3">→</div>
+    <section class="line line1 l1"><h3>LINE 1 · RECTANGULAR DUCTS</h3><div class="grid">{cards_for('Line 1')}</div></section>
+    <section class="line line2 l2"><h3>LINE 2 · ROUND / SPIRAL</h3><div class="grid">{cards_for('Line 2')}</div></section>
+    <section class="line line3 l3"><h3>LINE 3 · CUSTOM / WELDED</h3><div class="grid">{cards_for('Line 3')}</div></section>
+    <div class="wip-lane">Assembly / WIP staging lane</div>
+    <section class="shared"><h3>SHARED RESOURCES</h3><div class="grid">{cards_for('Shared')}</div></section>
+    <div class="legend">
+      <span style="--c:#22c55e">Running</span><span style="--c:#f59e0b">Idle</span><span style="--c:#ef4444">Down</span><span style="--c:#94a3b8">Planned</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+"""
 
 st.subheader("Factory floor live layout")
-st.plotly_chart(factory_layout(machines), use_container_width=True, config={"displayModeBar": False})
+components.html(layout_html, height=980, scrolling=False)
 
-left, right = st.columns([0.9, 1.1])
+left, right = st.columns([1, 1.35])
 with left:
-    st.subheader("Machine details")
-    choices = machines.apply(lambda r: f"{int(r.id)} · {r.machine}", axis=1).tolist()
-    selected = st.selectbox("Select machine", choices, label_visibility="collapsed")
-    mid = int(selected.split(" · ")[0])
-    m = machines[machines.id == mid].iloc[0]
-    c1, c2 = st.columns(2)
-    c1.plotly_chart(donut(m.utilization, "Utilization", STATUS_COLOR.get(m.status, "#94a3b8")), use_container_width=True, config={"displayModeBar": False})
-    c2.plotly_chart(donut(m.wip_hours, "WIP", "#64748b", "h", 4), use_container_width=True, config={"displayModeBar": False})
-    st.write(f"**Status:** {m.status}")
-    st.write(f"**Current job:** {m.current_job}")
-    st.write(f"**Operator:** {m.operator}")
-    st.write(f"**Started:** {m.started_at}")
-    st.write(f"**Last updated:** {m.last_updated}")
-    st.write(f"**Expected finish:** {m.expected_finish}")
+    st.subheader("Machine detail")
+    selected = st.selectbox("Machine", machines.apply(lambda r: f"{int(r.id)} · {r.machine}", axis=1))
+    m = machines[machines.id == int(selected.split(" · ")[0])].iloc[0]
+    st.markdown(f"""
+    <div class="clean-card">
+      <h3 style="margin-top:0">{html.escape(m.machine)}</h3>
+      <p><b>Status:</b> {html.escape(m.status)}</p>
+      <p><b>Current job:</b> {html.escape(str(m.current_job))}</p>
+      <p><b>Operator:</b> {html.escape(str(m.operator))}</p>
+      <p><b>Started:</b> {html.escape(str(m.started_at))}</p>
+      <p><b>Last updated:</b> {html.escape(str(m.last_updated))}</p>
+      <p><b>Expected finish:</b> {html.escape(str(m.expected_finish))}</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 with right:
     st.subheader("Production lists")
@@ -163,11 +188,10 @@ with right:
 
 st.subheader("Operator phone input mock")
 with st.form("operator_update", border=True):
-    a, b, c, d = st.columns([1, 1, 1, 1])
+    a, b, c, d = st.columns([1, 1, 1, 1.2])
     job = a.selectbox("Job", jobs[jobs.status == "WIP"].job_id)
     machine = b.selectbox("Machine", machines.machine)
     action = c.selectbox("Action", ["Start", "Pause", "Resume", "Complete stage", "Send to QA"])
     note = d.text_input("Note", placeholder="optional")
-    submitted = st.form_submit_button("Submit mock update")
-    if submitted:
-        st.success(f"Mock saved: {job} · {machine} · {action}. Later this can write to PostgreSQL/Firebase/Supabase.")
+    if st.form_submit_button("Submit mock update"):
+        st.success(f"Mock saved: {job} · {machine} · {action}")
