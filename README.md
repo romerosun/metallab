@@ -1,6 +1,9 @@
-# Duct Manufacturing Dashboard v6
+# Duct Manufacturing Dashboard v8
 
-Streamlit mock dashboard for a duct manufacturing factory.
+Streamlit mock dashboard with:
+- Live factory floor layout
+- Machine status and WIP
+- Capacity calculator by product family, shifts, labor, thickness and line routing
 
 ## Run locally
 ```bash
@@ -9,4 +12,4 @@ streamlit run app.py
 ```
 
 ## Deploy
-Upload this folder to GitHub, then connect the repo in Streamlit Community Cloud.
+Upload this folder to GitHub, then connect the repo to Streamlit Community Cloud.
