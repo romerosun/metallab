@@ -1,9 +1,6 @@
-# Duct Manufacturing Dashboard v8
+# Factory Capacity Planner
 
-Streamlit mock dashboard with:
-- Live factory floor layout
-- Machine status and WIP
-- Capacity calculator by product family, shifts, labor, thickness and line routing
+Streamlit planning tool for duct/HVAC manufacturing capacity.
 
 ## Run locally
 ```bash
@@ -12,4 +9,4 @@ streamlit run app.py
 ```
 
 ## Deploy
-Upload this folder to GitHub, then connect the repo to Streamlit Community Cloud.
+Upload these files to GitHub, then connect the repo to Streamlit Community Cloud.
