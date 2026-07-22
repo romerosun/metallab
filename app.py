@@ -1,224 +1,201 @@
+import math
 from pathlib import Path
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
-BASE = Path(__file__).parent
+st.set_page_config(page_title='HVAC Production Metro', layout='wide')
+BASE = Path(__file__).resolve().parent
 
-st.set_page_config(page_title="Factory Capacity Planner", layout="wide", page_icon="🏭")
+@st.cache_data
+def load_data():
+    return (
+        pd.read_csv(BASE / 'orders.csv'),
+        pd.read_csv(BASE / 'machines.csv'),
+        pd.read_csv(BASE / 'routing_assumptions.csv'),
+    )
 
-CSS = """
+orders_default, machines_default, routing_default = load_data()
+
+st.markdown('''
 <style>
-:root { --bg:#0b0f16; --panel:#101722; --line:#263449; --text:#f8fafc; --muted:#9db1cf; --green:#22d36d; --yellow:#f5a400; --red:#ef4444; --blue:#2f80ff; }
-html, body, [data-testid="stAppViewContainer"] { background: var(--bg); color: var(--text); }
-[data-testid="stHeader"] { background: transparent; }
-.block-container { padding-top: 1.2rem; max-width: 1500px; }
-h1, h2, h3, h4, p, span, div, label { color: var(--text); }
-.small { color: var(--muted); font-size: 0.85rem; }
-.kpi { background: var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px 20px; min-height:132px; }
-.kpi .label { color:#9aa8bc; font-weight:800; font-size:0.85rem; }
-.kpi .value { font-size:2rem; font-weight:900; margin-top:12px; }
-.kpi .sub { color:#93c5fd; font-size:0.82rem; margin-top:12px; }
-.kpi.good { border-color:#1f7a49; }
-.kpi.warn { border-color:#a66d00; }
-.kpi.bad { border-color:#9f2626; }
-.badge { display:inline-block; padding:5px 10px; border-radius:999px; font-weight:800; font-size:0.8rem; }
-.badge.good { background:#113d25; color:#48f28a; }
-.badge.warn { background:#3a2e0e; color:#ffd166; }
-.badge.bad { background:#3a1212; color:#ff8a8a; }
-.bar-wrap { background:#1d2635; height:18px; border-radius:999px; overflow:hidden; border:1px solid #2d3b50; }
-.bar-fill { height:100%; border-radius:999px; }
-.note { background:#0f1724; border:1px solid #263449; border-radius:14px; padding:16px 18px; color:#b9c9e3; }
-hr { border-color:#243044; }
+.block-container {padding-top: 1.5rem; padding-bottom: 3rem; max-width: 1600px;}
+[data-testid="stMetric"] {border: 1px solid rgba(128,128,128,.25); border-radius: 14px; padding: 14px 16px; background: rgba(128,128,128,.04);}
+[data-testid="stMetricLabel"] {font-size: .88rem;}
+div[data-testid="stDataEditor"] {border-radius: 12px; overflow: hidden;}
 </style>
-"""
-st.markdown(CSS, unsafe_allow_html=True)
+''', unsafe_allow_html=True)
 
-# ---------- Capacity model defaults ----------
-MACHINE_DEFAULTS = pd.DataFrame([
-    {"machine":"CNC Plasma Cutting Table", "line":"Shared", "process":"Cutting", "speed_m_min":6.0, "setup_min":20, "operators":1, "thickness_min":0.5, "thickness_max":6.0},
-    {"machine":"Hydraulic Pan Brake", "line":"Shared", "process":"Bending", "speed_m_min":4.0, "setup_min":15, "operators":1, "thickness_min":0.5, "thickness_max":3.0},
-    {"machine":"Pittsburgh Lock Rollformer #1", "line":"Rectangular", "process":"Lock forming", "speed_m_min":10.5, "setup_min":10, "operators":1, "thickness_min":0.5, "thickness_max":1.6},
-    {"machine":"Pittsburgh Lock / TDC Rollformer #2", "line":"Rectangular", "process":"Lock/TDC forming", "speed_m_min":12.0, "setup_min":10, "operators":1, "thickness_min":0.5, "thickness_max":1.6},
-    {"machine":"Beading / Crimping Machine", "line":"Shared", "process":"Beading/crimping", "speed_m_min":8.0, "setup_min":10, "operators":1, "thickness_min":0.5, "thickness_max":2.0},
-    {"machine":"Duct Seaming Machine", "line":"Shared", "process":"Seaming", "speed_m_min":7.0, "setup_min":10, "operators":1, "thickness_min":0.5, "thickness_max":2.0},
-    {"machine":"3-Roll Plate Roller #1", "line":"Round", "process":"Rolling", "speed_m_min":4.0, "setup_min":20, "operators":1, "thickness_min":0.5, "thickness_max":3.0},
-    {"machine":"3-Roll Plate Bending Machine #2", "line":"Round", "process":"Heavy rolling", "speed_m_min":3.0, "setup_min":25, "operators":1, "thickness_min":0.5, "thickness_max":5.0},
-    {"machine":"Mechanical Power Press", "line":"Custom", "process":"Punching/forming", "speed_m_min":5.0, "setup_min":20, "operators":1, "thickness_min":0.5, "thickness_max":4.0},
-    {"machine":"Hydraulic Punch / Ironworker", "line":"Custom", "process":"Punching/notching", "speed_m_min":4.5, "setup_min":20, "operators":1, "thickness_min":0.5, "thickness_max":5.0},
-])
+st.title('HVAC Production Metro')
+st.caption('Mock production plan using the updated machine inventory. Processing times are editable assumptions until actual shop data is collected.')
 
-ROUTES = {
-    "Rectangular duct": ["CNC Plasma Cutting Table", "Pittsburgh Lock Rollformer #1", "Pittsburgh Lock / TDC Rollformer #2", "Hydraulic Pan Brake", "Beading / Crimping Machine", "Duct Seaming Machine"],
-    "Round duct": ["CNC Plasma Cutting Table", "3-Roll Plate Roller #1", "3-Roll Plate Bending Machine #2", "Beading / Crimping Machine", "Duct Seaming Machine"],
-    "Connector / fitting": ["CNC Plasma Cutting Table", "Hydraulic Pan Brake", "Mechanical Power Press", "Hydraulic Punch / Ironworker", "Duct Seaming Machine"],
-    "Roof / HVAC base": ["CNC Plasma Cutting Table", "Hydraulic Pan Brake", "Mechanical Power Press", "Hydraulic Punch / Ironworker"],
-    "Custom work": ["CNC Plasma Cutting Table", "Mechanical Power Press", "Hydraulic Punch / Ironworker", "Hydraulic Pan Brake"],
-}
+with st.sidebar:
+    st.header('Planning inputs')
+    shifts = st.number_input('Shifts', min_value=1, max_value=3, value=1, step=1)
+    hours_per_shift = st.number_input('Hours per shift', min_value=1.0, max_value=16.0, value=8.0, step=0.5)
+    operators = st.number_input('Operators available', min_value=1, max_value=100, value=8, step=1)
+    paid_hours = st.number_input('Actual paid labor hours', min_value=0.0, value=64.0, step=1.0)
+    labor_efficiency = st.slider('Labor efficiency', 40, 100, 82, 1) / 100
+    setup_minutes = st.number_input('Setup minutes per order / machine', min_value=0.0, value=12.0, step=1.0)
 
+plan_tab, order_tab, assumption_tab = st.tabs(['Metro plan', 'Order list', 'Assumptions'])
 
-def health_class(pct: float):
-    if pct < 70:
-        return "good", "#22d36d", "Comfortable"
-    if pct <= 90:
-        return "warn", "#f5a400", "Getting tight"
-    return "bad", "#ef4444", "Overloaded"
+with order_tab:
+    st.subheader('Example order list')
+    st.caption('Replace these example rows after learning how the company records orders.')
+    orders = st.data_editor(
+        orders_default,
+        num_rows='dynamic',
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            'family': st.column_config.SelectboxColumn('family', options=['Rectangular','Round','Fittings','Custom'], required=True),
+            'due_date': st.column_config.DateColumn('due_date'),
+            'quantity': st.column_config.NumberColumn('quantity', min_value=1),
+            'avg_length_m': st.column_config.NumberColumn('avg_length_m', min_value=0.1, format='%.2f'),
+            'thickness_mm': st.column_config.NumberColumn('thickness_mm', min_value=0.1, format='%.2f'),
+        },
+        key='orders_editor',
+    )
 
+with assumption_tab:
+    st.subheader('Machine-time assumptions')
+    st.caption('These are placeholders. Update them using time studies, machine logs, or validated catalog calculations.')
+    routing = st.data_editor(
+        routing_default,
+        use_container_width=True,
+        hide_index=True,
+        disabled=['family','machine_id','machine'],
+        column_config={
+            'base_minutes_per_unit': st.column_config.NumberColumn('Base min/unit', min_value=0.01, format='%.2f'),
+            'labor_touch_factor': st.column_config.NumberColumn('Labor touch factor', min_value=0.0, max_value=2.0, format='%.2f'),
+        },
+        key='routing_editor',
+    )
+    st.subheader('Machine availability')
+    machines = st.data_editor(
+        machines_default,
+        use_container_width=True,
+        hide_index=True,
+        disabled=['machine_id','machine','line'],
+        column_config={
+            'parallel_units': st.column_config.NumberColumn('Parallel units', min_value=1, step=1),
+            'availability': st.column_config.NumberColumn('Availability', min_value=0.1, max_value=1.0, format='%.2f'),
+        },
+        key='machines_editor',
+    )
 
-def kpi_card(label, value, sub, cls=""):
-    st.markdown(f"""
-    <div class='kpi {cls}'>
-      <div class='label'>{label}</div>
-      <div class='value'>{value}</div>
-      <div class='sub'>{sub}</div>
-    </div>
-    """, unsafe_allow_html=True)
+orders = st.session_state.get('orders_editor', orders_default)
+routing = st.session_state.get('routing_editor', routing_default)
+machines = st.session_state.get('machines_editor', machines_default)
 
+def adjusted_minutes(order, base):
+    length_factor = max(float(order['avg_length_m']) / 2.0, 0.35)
+    thickness_factor = 1.0 + max(float(order['thickness_mm']) - 0.8, 0) * 0.22
+    return base * length_factor * thickness_factor
 
-def progress_bar(title, used, limit, suffix="h"):
-    pct = 0 if limit <= 0 else min(140, used / limit * 100)
-    cls, color, label = health_class(pct)
-    st.markdown(f"""
-    <div class='note'>
-      <b>{title}</b><br>
-      <span class='small'>{used:.1f}{suffix} used / {limit:.1f}{suffix} limit</span><br><br>
-      <div class='bar-wrap'><div class='bar-fill' style='width:{min(pct,100):.1f}%; background:{color};'></div></div><br>
-      <span class='badge {cls}'>{label} · {pct:.0f}%</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def estimate_capacity(specs, avg_lengths, quantities, thicknesses, total_hours, operators_available, efficiency):
-    specs = specs.copy()
-    machine_limit_hours = total_hours * efficiency
-    machine_load = {m: 0.0 for m in specs.machine}
-    product_results = []
-
-    for product, qty in quantities.items():
-        length = avg_lengths[product]
-        thickness = thicknesses[product]
-        route = ROUTES[product]
-        total_job_min = 0.0
-        bottleneck = None
-        bottleneck_min = -1
-        feasible_thickness = True
-
-        for mach in route:
-            row = specs.loc[specs.machine == mach].iloc[0]
-            if not (row.thickness_min <= thickness <= row.thickness_max):
-                feasible_thickness = False
-            process_min = row.setup_min + (qty * length) / max(row.speed_m_min, 0.01)
-            machine_load[mach] += process_min
-            total_job_min += process_min
-            if process_min > bottleneck_min:
-                bottleneck_min = process_min
-                bottleneck = mach
-
-        product_results.append({
-            "product": product,
-            "qty": qty,
-            "avg_length_m": length,
-            "thickness_mm": thickness,
-            "estimated_machine_hours": round(total_job_min / 60, 2),
-            "bottleneck_step": bottleneck,
-            "thickness_ok": feasible_thickness,
+records = []
+for _, order in orders.iterrows():
+    routes = routing[routing['family'] == order['family']]
+    for _, route in routes.iterrows():
+        run_minutes = float(order['quantity']) * adjusted_minutes(order, float(route['base_minutes_per_unit']))
+        machine_minutes = run_minutes + setup_minutes
+        labor_minutes = run_minutes * float(route['labor_touch_factor']) + setup_minutes
+        records.append({
+            'order_id': order['order_id'],
+            'product': order['product'],
+            'family': order['family'],
+            'machine_id': int(route['machine_id']),
+            'machine': route['machine'],
+            'machine_hours': machine_minutes / 60,
+            'labor_hours': labor_minutes / 60 / labor_efficiency,
         })
 
-    load_df = pd.DataFrame([
-        {"machine": m, "load_hours": v / 60, "utilization_%": 100 * (v / 60) / machine_limit_hours if machine_limit_hours else 0}
-        for m, v in machine_load.items()
-    ])
-    load_df = load_df.merge(specs[["machine", "line", "process", "operators"]], on="machine", how="left")
-    load_df["utilization_%"] = load_df["utilization_%"].round(1)
-    load_df["load_hours"] = load_df["load_hours"].round(2)
+load = pd.DataFrame(records)
+if load.empty:
+    machine_load = pd.DataFrame(columns=['machine_id','machine','machine_hours','labor_hours','orders','line','parallel_units','availability','available_machine_hours','utilization'])
+else:
+    machine_load = (
+        load.groupby(['machine_id','machine'], as_index=False)
+            .agg(machine_hours=('machine_hours','sum'), labor_hours=('labor_hours','sum'), orders=('order_id','nunique'))
+            .merge(machines[['machine_id','line','parallel_units','availability']], on='machine_id', how='left')
+    )
+    machine_load['available_machine_hours'] = shifts * hours_per_shift * machine_load['parallel_units'] * machine_load['availability']
+    machine_load['utilization'] = machine_load['machine_hours'] / machine_load['available_machine_hours'].replace(0, math.nan)
+    machine_load['utilization'] = machine_load['utilization'].fillna(0)
 
-    labor_required = sum((machine_load.get(row.machine, 0) / 60) * row.operators for _, row in specs.iterrows())
-    labor_capacity = operators_available * total_hours * efficiency
-    bottleneck_row = load_df.sort_values("utilization_%", ascending=False).iloc[0]
-    return pd.DataFrame(product_results), load_df.sort_values("utilization_%", ascending=False), labor_required, labor_capacity, machine_limit_hours, bottleneck_row
+total_machine_hours = machine_load['machine_hours'].sum() if not machine_load.empty else 0
+estimated_labor_hours = load['labor_hours'].sum() if not load.empty else 0
+available_labor_hours = operators * shifts * hours_per_shift
+paid_variance = paid_hours - estimated_labor_hours
+bottleneck = machine_load.sort_values('utilization', ascending=False).iloc[0] if not machine_load.empty else None
 
+with plan_tab:
+    cols = st.columns(6)
+    cols[0].metric('Estimated labor hours', f'{estimated_labor_hours:,.1f} h')
+    cols[1].metric('Paid labor hours', f'{paid_hours:,.1f} h', f'{paid_variance:+.1f} h vs estimate')
+    cols[2].metric('Total machine hours', f'{total_machine_hours:,.1f} h')
+    cols[3].metric('Available labor hours', f'{available_labor_hours:,.1f} h')
+    cols[4].metric('Orders', f"{orders['order_id'].nunique():,}")
+    cols[5].metric('Constraint', bottleneck['machine'] if bottleneck is not None else '—', f"{bottleneck['utilization']:.0%} load" if bottleneck is not None else None)
 
-st.title("Factory Capacity Planner")
-st.caption("First-pass planning tool for duct manufacturing. Enter today's work and see labor load, machine limits, and bottlenecks.")
+    labor_ratio = estimated_labor_hours / available_labor_hours if available_labor_hours else 0
+    paid_ratio = estimated_labor_hours / paid_hours if paid_hours else 0
+    st.markdown('#### Labor comparison')
+    c1, c2 = st.columns(2)
+    with c1:
+        st.progress(min(labor_ratio, 1.0), text=f'Estimated labor demand: {estimated_labor_hours:.1f} / {available_labor_hours:.1f} available hours')
+    with c2:
+        st.progress(min(paid_ratio, 1.0), text=f'Estimated productive labor: {estimated_labor_hours:.1f} / {paid_hours:.1f} paid hours')
 
-left, right = st.columns([1.0, 2.3], gap="large")
+    st.markdown('#### Production metro')
+    st.caption('Each station shows estimated machine hours from the current order list. Shared stations appear on multiple lines.')
 
-with left:
-    st.subheader("Factory limits")
-    shifts = st.number_input("Number of shifts", 1, 3, 1)
-    hours_per_shift = st.number_input("Hours per shift", 1.0, 12.0, 8.0, 0.5)
-    operators = st.number_input("Operators available", 1, 50, 6)
-    efficiency = st.slider("Efficiency factor", 30, 100, 70, help="Practical usable time after setup, walking, waiting, breaks, rework, and material handling.") / 100
-    total_hours = shifts * hours_per_shift
+    station = {int(r.machine_id): r for r in machine_load.itertuples()} if not machine_load.empty else {}
+    def node(mid, label):
+        r = station.get(mid)
+        hours = r.machine_hours if r else 0
+        util = r.utilization if r else 0
+        status = 'over' if util > 1 else 'near' if util > .85 else 'ok'
+        return f'''<div class="station {status}"><div class="dot"></div><div class="station-name">{label}</div><div class="station-hours">{hours:.1f} h</div><div class="station-util">{util:.0%} of available</div></div>'''
 
-    st.markdown("---")
-    st.subheader("Today’s order")
-    st.caption("Use quantity, average length, and thickness for each product family.")
+    metro_html = f'''
+    <style>
+      :root {{ color-scheme: light dark; }}
+      body {{ margin:0; font-family:Inter,ui-sans-serif,system-ui; background:transparent; color:inherit; }}
+      .metro {{ padding:8px 4px 18px; }}
+      .line-row {{ display:grid; grid-template-columns:155px 1fr; gap:18px; margin:22px 0; align-items:start; }}
+      .line-label {{ font-weight:700; padding-top:22px; }}
+      .track {{ display:flex; align-items:flex-start; gap:16px; position:relative; padding:0 8px; flex-wrap:wrap; }}
+      .track:before {{ content:''; position:absolute; left:18px; right:18px; top:27px; height:5px; border-radius:999px; background:var(--line); opacity:.75; }}
+      .station {{ width:150px; min-height:118px; padding:14px 12px 12px; border:1px solid rgba(128,128,128,.34); border-radius:14px; background:rgba(128,128,128,.07); position:relative; z-index:2; box-sizing:border-box; }}
+      .dot {{ width:18px; height:18px; border-radius:50%; border:5px solid var(--line); background:Canvas; margin-bottom:13px; }}
+      .station-name {{ font-size:13px; line-height:1.25; font-weight:650; min-height:34px; }}
+      .station-hours {{ font-size:22px; font-weight:750; margin-top:7px; }}
+      .station-util {{ font-size:11px; opacity:.68; margin-top:2px; }}
+      .station.near {{ border-color:#d89a18; }} .station.over {{ border-color:#d34848; }}
+      .shared {{ --line:#d49b22; }} .rect {{ --line:#4387f5; }} .round {{ --line:#36b86c; }} .custom {{ --line:#a66be8; }}
+      .legend {{ display:flex; flex-wrap:wrap; gap:12px; font-size:12px; opacity:.78; margin:8px 0 0 173px; }}
+      @media(max-width:800px) {{ .line-row {{ grid-template-columns:1fr; }} .line-label {{ padding-top:0; }} .track:before {{ display:none; }} .legend {{ margin-left:0; }} }}
+    </style>
+    <div class="metro">
+      <div class="line-row shared"><div class="line-label">Shared cutting</div><div class="track">{node(1,'Fiber Laser #1')}{node(2,'Fiber Laser #2')}</div></div>
+      <div class="line-row rect"><div class="line-label">Rectangular line</div><div class="track">{node(6,'Pittsburgh Lock #1')}{node(7,'Pittsburgh / TDC #2')}{node(5,'Hydraulic Pan Brake')}{node(8,'Beader / Crimper')}{node(9,'Duct Seamer')}</div></div>
+      <div class="line-row round"><div class="line-label">Round / spiral line</div><div class="track">{node(14,'Spiral Duct Former')}{node(10,'3-Roll Plate Roller #1')}{node(11,'3-Roll Plate Roller #2')}{node(8,'Beader / Crimper')}{node(9,'Duct Seamer')}</div></div>
+      <div class="line-row custom"><div class="line-label">Fittings / custom</div><div class="track">{node(15,'Elbow / Gore Former')}{node(16,'Collar Maker')}{node(12,'Mechanical Press')}{node(13,'Ironworker')}{node(5,'Hydraulic Pan Brake')}</div></div>
+      <div class="legend"><span>Normal &lt;85%</span><span>Amber 85–100%</span><span>Red &gt;100%</span></div>
+    </div>'''
+    components.html(metro_html, height=760, scrolling=False)
 
-with right:
-    products = ["Rectangular duct", "Round duct", "Connector / fitting", "Roof / HVAC base", "Custom work"]
-    defaults = {
-        "Rectangular duct": (80, 2.0, 0.9),
-        "Round duct": (50, 2.0, 0.9),
-        "Connector / fitting": (35, 0.8, 1.0),
-        "Roof / HVAC base": (20, 1.5, 1.2),
-        "Custom work": (10, 1.0, 1.5),
-    }
-    inputs = []
-    for p in products:
-        st.markdown(f"**{p}**")
-        c1, c2, c3 = st.columns(3)
-        dq, dl, dt = defaults[p]
-        with c1: qty = st.number_input("Qty", 0, 10000, dq, key=f"qty_{p}")
-        with c2: length = st.number_input("Avg length m", 0.1, 20.0, dl, 0.1, key=f"len_{p}")
-        with c3: thk = st.number_input("Thickness mm", 0.1, 10.0, dt, 0.1, key=f"thk_{p}")
-        inputs.append((p, qty, length, thk))
+    st.markdown('#### Machine load')
+    if machine_load.empty:
+        st.info('Add at least one order to calculate machine load.')
+    else:
+        display = machine_load.copy()
+        display['Machine hours'] = display['machine_hours'].round(1)
+        display['Available hours'] = display['available_machine_hours'].round(1)
+        display['Utilization'] = (display['utilization'] * 100).round(0).astype(int).astype(str) + '%'
+        display['Labor hours'] = display['labor_hours'].round(1)
+        st.dataframe(display[['machine','line','orders','Machine hours','Available hours','Utilization','Labor hours']].sort_values('Machine hours', ascending=False), use_container_width=True, hide_index=True)
 
-quantities = {p:q for p,q,_,_ in inputs}
-avg_lengths = {p:l for p,_,l,_ in inputs}
-thicknesses = {p:t for p,_,_,t in inputs}
-
-specs = MACHINE_DEFAULTS.copy()
-product_df, load_df, labor_required, labor_capacity, machine_limit_hours, bottleneck_row = estimate_capacity(
-    specs, avg_lengths, quantities, thicknesses, total_hours, operators, efficiency
-)
-
-st.markdown("---")
-st.subheader("Capacity result")
-
-labor_pct = 0 if labor_capacity <= 0 else labor_required / labor_capacity * 100
-machine_pct = load_df["utilization_%"].max()
-labor_cls, _, labor_label = health_class(labor_pct)
-machine_cls, _, machine_label = health_class(machine_pct)
-feasible = "Yes" if machine_pct <= 100 and labor_pct <= 100 and product_df.thickness_ok.all() else "No"
-
-k1, k2, k3, k4 = st.columns(4)
-with k1: kpi_card("Labor required", f"{labor_required:.1f}h", f"Limit {labor_capacity:.1f}h · {labor_label}", labor_cls)
-with k2: kpi_card("Machine bottleneck", bottleneck_row.machine, f"{machine_pct:.0f}% of daily machine limit", machine_cls)
-with k3: kpi_card("Can make today?", feasible, "Based on current assumptions", "good" if feasible == "Yes" else "bad")
-with k4: kpi_card("Unused labor", f"{max(labor_capacity-labor_required,0):.1f}h", "After planned work")
-
-c1, c2 = st.columns(2, gap="large")
-with c1:
-    progress_bar("Labor capacity limit", labor_required, labor_capacity, "h")
-with c2:
-    progress_bar("Highest machine load limit", machine_pct, 100, "%")
-
-st.markdown("---")
-st.subheader("Machine load")
-st.dataframe(load_df, use_container_width=True, hide_index=True)
-
-fig = go.Figure(go.Bar(x=load_df["machine"], y=load_df["utilization_%"]))
-fig.add_hline(y=70, line_dash="dot", annotation_text="comfortable limit")
-fig.add_hline(y=90, line_dash="dot", annotation_text="tight")
-fig.add_hline(y=100, line_dash="dash", annotation_text="capacity limit")
-fig.update_layout(height=390, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color="white"), yaxis_title="Utilization %", xaxis_title="")
-st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-st.subheader("Product estimates")
-st.dataframe(product_df, use_container_width=True, hide_index=True)
-
-with st.expander("Machine assumptions", expanded=False):
-    st.caption("Editable placeholders seeded from catalog-style machine ratings and conservative assumptions where exact rates are unknown.")
-    edited = st.data_editor(MACHINE_DEFAULTS, use_container_width=True, hide_index=True, num_rows="fixed")
-    st.info("After changing assumptions, copy them into the code or wire this table to a CSV/database in the next version.")
+    st.info('The paid-hours comparison should later separate direct production, setup, material handling, maintenance, rework, breaks, and idle time.')

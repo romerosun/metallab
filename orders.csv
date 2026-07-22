@@ -1,0 +1,6 @@
+order_id,product,family,quantity,avg_length_m,thickness_mm,priority,due_date
+ORD-1001,Rectangular duct,Rectangular,120,2.4,0.8,2,2026-07-24
+ORD-1002,Spiral duct,Round,90,3.0,0.7,1,2026-07-24
+ORD-1003,Round elbows,Fittings,45,0.5,0.8,3,2026-07-25
+ORD-1004,Roof curb / HVAC base,Custom,18,1.2,1.2,4,2026-07-25
+ORD-1005,Custom fence panels,Custom,12,2.0,2.0,4,2026-07-26
