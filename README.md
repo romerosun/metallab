@@ -1,4 +1,4 @@
-# HVAC Production Metro
+# HVAC Production Planning Dashboard
 
 Streamlit mock dashboard based on the revised July 2026 equipment inventory.
 

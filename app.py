@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title='HVAC Production Metro', layout='wide')
+st.set_page_config(page_title='HVAC Production Planning Dashboard', layout='wide')
 BASE = Path(__file__).resolve().parent
 
 @st.cache_data
@@ -36,7 +36,7 @@ div[data-testid="stDataEditor"] {border-radius: 12px; overflow: hidden;}
 </style>
 ''', unsafe_allow_html=True)
 
-st.title('HVAC Production Metro')
+st.title('HVAC Production Planning Dashboard')
 st.caption('Mock production plan using the updated machine inventory. Processing times are editable assumptions until actual shop data is collected.')
 
 with st.sidebar:
@@ -48,7 +48,7 @@ with st.sidebar:
     labor_efficiency = st.slider('Labor efficiency', 40, 100, 82, 1) / 100
     setup_minutes = st.number_input('Setup minutes per order / machine', min_value=0.0, value=12.0, step=1.0)
 
-plan_tab, order_tab, assumption_tab = st.tabs(['Metro plan', 'Order list', 'Assumptions'])
+plan_tab, order_tab, assumption_tab = st.tabs(['Production plan', 'Order list', 'Assumptions'])
 
 with order_tab:
     st.subheader('Example order list')
@@ -157,7 +157,7 @@ with plan_tab:
     with c2:
         st.progress(min(paid_ratio, 1.0), text=f'Estimated productive labor: {estimated_labor_hours:.1f} / {paid_hours:.1f} paid hours')
 
-    st.markdown('#### Production metro')
+    st.markdown('#### Production flow')
     st.caption('Each station shows estimated machine hours from the current order list. Shared stations appear on multiple lines.')
 
     station = {int(r.machine_id): r for r in machine_load.itertuples()} if not machine_load.empty else {}
@@ -168,11 +168,11 @@ with plan_tab:
         status = 'over' if util > 1 else 'near' if util > .85 else 'ok'
         return f'''<div class="station {status}"><div class="dot"></div><div class="station-name">{label}</div><div class="station-hours">{hours:.1f} h</div><div class="station-util">{util:.0%} of available</div></div>'''
 
-    metro_html = f'''
+    flow_html = f'''
     <style>
       :root {{ color-scheme: light dark; }}
       body {{ margin:0; font-family:Inter,ui-sans-serif,system-ui; background:transparent; color:inherit; }}
-      .metro {{ padding:8px 4px 18px; }}
+      .production-flow {{ padding:8px 4px 18px; }}
       .line-row {{ display:grid; grid-template-columns:155px 1fr; gap:18px; margin:22px 0; align-items:start; }}
       .line-label {{ font-weight:700; padding-top:22px; }}
       .track {{ display:flex; align-items:flex-start; gap:16px; position:relative; padding:0 8px; flex-wrap:wrap; }}
@@ -187,14 +187,14 @@ with plan_tab:
       .legend {{ display:flex; flex-wrap:wrap; gap:12px; font-size:12px; opacity:.78; margin:8px 0 0 173px; }}
       @media(max-width:800px) {{ .line-row {{ grid-template-columns:1fr; }} .line-label {{ padding-top:0; }} .track:before {{ display:none; }} .legend {{ margin-left:0; }} }}
     </style>
-    <div class="metro">
+    <div class="production-flow">
       <div class="line-row shared"><div class="line-label">Shared cutting</div><div class="track">{node(1,'Fiber Laser #1')}{node(2,'Fiber Laser #2')}</div></div>
       <div class="line-row rect"><div class="line-label">Rectangular line</div><div class="track">{node(6,'Pittsburgh Lock #1')}{node(7,'Pittsburgh / TDC #2')}{node(5,'Hydraulic Pan Brake')}{node(8,'Beader / Crimper')}{node(9,'Duct Seamer')}</div></div>
       <div class="line-row round"><div class="line-label">Round / spiral line</div><div class="track">{node(14,'Spiral Duct Former')}{node(10,'3-Roll Plate Roller #1')}{node(11,'3-Roll Plate Roller #2')}{node(8,'Beader / Crimper')}{node(9,'Duct Seamer')}</div></div>
       <div class="line-row custom"><div class="line-label">Fittings / custom</div><div class="track">{node(15,'Elbow / Gore Former')}{node(16,'Collar Maker')}{node(12,'Mechanical Press')}{node(13,'Ironworker')}{node(5,'Hydraulic Pan Brake')}</div></div>
       <div class="legend"><span>Normal &lt;85%</span><span>Amber 85–100%</span><span>Red &gt;100%</span></div>
     </div>'''
-    components.html(metro_html, height=760, scrolling=False)
+    components.html(flow_html, height=760, scrolling=False)
 
     st.markdown('#### Machine load')
     if machine_load.empty:
