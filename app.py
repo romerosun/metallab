@@ -17,6 +17,16 @@ def load_data():
 
 orders_default, machines_default, routing_default = load_data()
 
+# Normalize dtypes for Streamlit data_editor compatibility.
+orders_default['due_date'] = pd.to_datetime(orders_default['due_date'], errors='coerce')
+orders_default['quantity'] = pd.to_numeric(orders_default['quantity'], errors='coerce').fillna(0).astype(int)
+orders_default['avg_length_m'] = pd.to_numeric(orders_default['avg_length_m'], errors='coerce').fillna(0.0).astype(float)
+orders_default['thickness_mm'] = pd.to_numeric(orders_default['thickness_mm'], errors='coerce').fillna(0.0).astype(float)
+machines_default['parallel_units'] = pd.to_numeric(machines_default['parallel_units'], errors='coerce').fillna(1).astype(int)
+machines_default['availability'] = pd.to_numeric(machines_default['availability'], errors='coerce').fillna(1.0).astype(float)
+routing_default['base_minutes_per_unit'] = pd.to_numeric(routing_default['base_minutes_per_unit'], errors='coerce').fillna(0.0).astype(float)
+routing_default['labor_touch_factor'] = pd.to_numeric(routing_default['labor_touch_factor'], errors='coerce').fillna(0.0).astype(float)
+
 st.markdown('''
 <style>
 .block-container {padding-top: 1.5rem; padding-bottom: 3rem; max-width: 1600px;}
@@ -85,9 +95,8 @@ with assumption_tab:
         key='machines_editor',
     )
 
-orders = st.session_state.get('orders_editor', orders_default)
-routing = st.session_state.get('routing_editor', routing_default)
-machines = st.session_state.get('machines_editor', machines_default)
+# The data_editor return values are the edited DataFrames for this rerun.
+# Do not read the widget's internal session-state payload as if it were a DataFrame.
 
 def adjusted_minutes(order, base):
     length_factor = max(float(order['avg_length_m']) / 2.0, 0.35)
